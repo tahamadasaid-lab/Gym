@@ -17,6 +17,17 @@ android {
         versionName = "2.0"
     }
 
+    // Clé de signature fixe (versionnée) : chaque nouvel APK peut s'installer par-dessus le précédent
+    // sans perdre les données. Usage personnel uniquement.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("gymtracker-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
