@@ -31,12 +31,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,15 +61,17 @@ fun ScreenScaffold(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
+    snackbarHostState: SnackbarHostState? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { if (snackbarHostState != null) SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(title)
+                        Text(title, style = MaterialTheme.typography.titleLarge)
                         if (subtitle != null) {
                             Text(subtitle, style = MaterialTheme.typography.bodySmall)
                         }
@@ -103,7 +108,7 @@ fun EmptyState(icon: ImageVector, title: String, message: String, modifier: Modi
 fun StatTile(label: String, value: String, modifier: Modifier = Modifier, detail: String? = null) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(Modifier.padding(12.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -211,6 +216,84 @@ fun ConfirmDialog(
         title = { Text(title) },
         text = { Text(message) },
         confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
+}
+
+@Composable
+fun SectionHeader(title: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
+    Row(modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        action?.invoke()
+    }
+}
+
+/** Saisie / modification d'une série (poids × reps). */
+@Composable
+fun EditSetDialog(
+    title: String,
+    initialWeight: String,
+    initialReps: String,
+    onDismiss: () -> Unit,
+    onSave: (weightKg: Double, reps: Int) -> Unit,
+    onDelete: (() -> Unit)? = null,
+) {
+    var weight by remember { mutableStateOf(initialWeight) }
+    var reps by remember { mutableStateOf(initialReps) }
+    var error by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                NumberStepper("Poids (kg)", weight, { weight = it; error = false }, step = 2.5, decimal = true)
+                NumberStepper("Répétitions", reps, { reps = it; error = false }, step = 1.0, decimal = false)
+                if (error) {
+                    Text("Valeurs invalides", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                if (onDelete != null) {
+                    TextButton(onClick = onDelete) {
+                        Text("Supprimer cette série", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val r = reps.toIntOrNull()?.takeIf { it > 0 }
+                val w = if (weight.isBlank()) 0.0 else parseWeight(weight)
+                if (r == null || w == null) error = true else onSave(w, r)
+            }) { Text("Enregistrer") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
+}
+
+@Composable
+fun TextInputDialog(
+    title: String,
+    label: String,
+    initial: String = "",
+    confirmLabel: String = "OK",
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(label) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text.trim()) }, enabled = text.isNotBlank()) { Text(confirmLabel) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }

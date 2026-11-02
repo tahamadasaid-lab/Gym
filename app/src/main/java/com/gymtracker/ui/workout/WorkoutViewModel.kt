@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gymtracker.data.Exercise
+import com.gymtracker.data.ProgramWithExercises
 import com.gymtracker.data.SessionExerciseWithSets
 import com.gymtracker.data.SessionSummary
 import com.gymtracker.data.SessionWithExercises
@@ -35,7 +36,9 @@ sealed interface WorkoutUiState {
     data class NoSession(
         val sessionsThisWeek: Int,
         val totalSessions: Int,
-        val lastSession: SessionSummary?,
+        val weekVolume: Double,
+        val recent: List<SessionSummary>,
+        val programs: List<ProgramWithExercises>,
     ) : WorkoutUiState
     data class Active(val session: SessionWithExercises) : WorkoutUiState
 }
@@ -52,15 +55,18 @@ class WorkoutViewModel(
         .flatMapLatest { id -> if (id == null) flowOf(null) else repo.observeSession(id) }
 
     val uiState: StateFlow<WorkoutUiState> =
-        combine(activeDetail, repo.observeFinishedSessions()) { active, finished ->
+        combine(activeDetail, repo.observeFinishedSessions(), repo.observePrograms()) { active, finished, programs ->
             if (active != null) {
                 WorkoutUiState.Active(active)
             } else {
                 val weekStart = startOfWeek()
+                val week = finished.filter { it.session.startedAt >= weekStart }
                 WorkoutUiState.NoSession(
-                    sessionsThisWeek = finished.count { it.session.startedAt >= weekStart },
+                    sessionsThisWeek = week.size,
                     totalSessions = finished.size,
-                    lastSession = finished.firstOrNull()?.summary(),
+                    weekVolume = week.sumOf { it.summary().volume },
+                    recent = finished.take(3).map { it.summary() },
+                    programs = programs,
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, WorkoutUiState.Loading)
@@ -106,6 +112,12 @@ class WorkoutViewModel(
 
     fun startSession() = viewModelScope.launch { repo.startSession() }
 
+    fun startProgram(programId: Long) = viewModelScope.launch { repo.startSessionFromProgram(programId) }
+
+    fun saveAsProgram(session: SessionWithExercises, name: String) = viewModelScope.launch {
+        repo.saveSessionAsProgram(session, name)
+    }
+
     /** Termine la séance ; si elle est vide, elle est simplement supprimée. */
     fun finishSession(session: SessionWithExercises) = viewModelScope.launch {
         if (session.exercises.all { it.sets.isEmpty() }) repo.deleteSession(session.session.id)
@@ -149,6 +161,10 @@ class WorkoutViewModel(
     }
 
     fun deleteSet(set: WorkoutSet) = viewModelScope.launch { repo.deleteSet(set) }
+
+    fun updateSet(set: WorkoutSet, weightKg: Double, reps: Int) = viewModelScope.launch {
+        repo.updateSet(set.copy(weightKg = weightKg, reps = reps))
+    }
 
     fun updateRest(exerciseId: Long, seconds: Int) = viewModelScope.launch { repo.updateRest(exerciseId, seconds) }
 

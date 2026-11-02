@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,7 +19,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,94 +52,224 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.gymtracker.data.BodyWeight
 import com.gymtracker.data.Exercise
 import com.gymtracker.ui.AppViewModelProvider
 import com.gymtracker.ui.components.ChartPoint
+import com.gymtracker.ui.components.ConfirmDialog
 import com.gymtracker.ui.components.EmptyState
+import com.gymtracker.ui.components.NumberStepper
 import com.gymtracker.ui.components.LineChart
 import com.gymtracker.ui.components.ScreenScaffold
 import com.gymtracker.ui.components.StatTile
+import com.gymtracker.ui.theme.PositiveGreen
 import com.gymtracker.util.formatLongDate
+import com.gymtracker.util.formatTime
+import com.gymtracker.util.parseWeight
 import com.gymtracker.util.formatVolume
 import com.gymtracker.util.formatWeight
 
 @Composable
 fun ProgressScreen(vm: ProgressViewModel = viewModel(factory = AppViewModelProvider.Factory)) {
+    val tab by vm.tab.collectAsStateWithLifecycle()
+    ScreenScaffold(title = "Progression") { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
+                Tab(selected = tab == 0, onClick = { vm.tab.value = 0 }, text = { Text("Exercices") })
+                Tab(selected = tab == 1, onClick = { vm.tab.value = 1 }, text = { Text("Poids de corps") })
+            }
+            if (tab == 0) ExerciseProgress(vm) else BodyWeightContent(vm)
+        }
+    }
+}
+
+@Composable
+private fun ExerciseProgress(vm: ProgressViewModel) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val metric by vm.metric.collectAsStateWithLifecycle()
-
-    ScreenScaffold(title = "Progression") { padding ->
-        when {
-            state.loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            state.trainedExercises.isEmpty() -> EmptyState(
-                Icons.AutoMirrored.Filled.ShowChart,
-                "Pas encore de données",
-                "Enregistre quelques séries pendant une séance pour voir ta progression ici.",
-                Modifier.padding(padding),
-            )
-            else -> {
-                val stats = state.stats
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
+    when {
+        state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        state.trainedExercises.isEmpty() -> EmptyState(
+            Icons.AutoMirrored.Filled.ShowChart,
+            "Pas encore de données",
+            "Enregistre quelques séries pendant une séance pour voir ta progression ici.",
+        )
+        else -> {
+            val stats = state.stats
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item {
+                    ExerciseSelector(state.trainedExercises, state.selected, vm::select)
+                }
+                if (stats.isNotEmpty()) {
+                    item { RecordsSection(stats) }
                     item {
-                        ExerciseSelector(state.trainedExercises, state.selected, vm::select)
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Metric.entries.forEach { m ->
+                                FilterChip(
+                                    selected = metric == m,
+                                    onClick = { vm.selectMetric(m) },
+                                    label = { Text(m.label) },
+                                )
+                            }
+                        }
                     }
-                    if (stats.isNotEmpty()) {
-                        item { RecordsSection(stats) }
-                        item {
-                            Row(
-                                Modifier.horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Metric.entries.forEach { m ->
-                                    FilterChip(
-                                        selected = metric == m,
-                                        onClick = { vm.selectMetric(m) },
-                                        label = { Text(m.label) },
-                                    )
-                                }
+                    item {
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text("${metric.label} par séance", style = MaterialTheme.typography.titleSmall)
+                                LineChart(
+                                    points = stats.map { ChartPoint(it.date, it.valueOf(metric)) },
+                                    formatValue = { v ->
+                                        if (metric == Metric.MaxReps) v.toInt().toString()
+                                        else formatWeight(Math.round(v * 2) / 2.0)
+                                    },
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
                             }
                         }
-                        item {
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text("${metric.label} par séance", style = MaterialTheme.typography.titleSmall)
-                                    LineChart(
-                                        points = stats.map { ChartPoint(it.date, it.valueOf(metric)) },
-                                        formatValue = { v ->
-                                            if (metric == Metric.MaxReps) v.toInt().toString()
-                                            else formatWeight(Math.round(v * 2) / 2.0)
-                                        },
-                                        modifier = Modifier.padding(top = 8.dp),
-                                    )
-                                }
-                            }
-                        }
-                        item {
-                            Text("Détail des séances", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-                        }
-                        val reversed = stats.asReversed()
-                        items(reversed.size, key = { reversed[it].sessionId }) { i ->
-                            val st = reversed[i]
-                            val before = reversed.getOrNull(i + 1)
-                            SessionStatRow(
-                                date = st.date,
-                                best = "${formatWeight(st.bestSetWeight)} kg × ${st.bestSetReps}",
-                                detail = "${st.setCount} séries · ${st.totalReps} reps · ${formatVolume(st.volume)}",
-                                delta = before?.let { st.valueOf(metric) - it.valueOf(metric) },
-                                unit = metric.unit,
-                            )
-                            HorizontalDivider()
-                        }
+                    }
+                    item {
+                        Text("Détail des séances", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    val reversed = stats.asReversed()
+                    items(reversed.size, key = { reversed[it].sessionId }) { i ->
+                        val st = reversed[i]
+                        val before = reversed.getOrNull(i + 1)
+                        SessionStatRow(
+                            date = st.date,
+                            best = "${formatWeight(st.bestSetWeight)} kg × ${st.bestSetReps}",
+                            detail = "${st.setCount} séries · ${st.totalReps} reps · ${formatVolume(st.volume)}",
+                            delta = before?.let { st.valueOf(metric) - it.valueOf(metric) },
+                            unit = metric.unit,
+                        )
+                        HorizontalDivider()
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BodyWeightContent(vm: ProgressViewModel) {
+    val entries by vm.bodyWeights.collectAsStateWithLifecycle()
+    var showAdd by remember { mutableStateOf(false) }
+    var toDelete by remember { mutableStateOf<BodyWeight?>(null) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Button(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                Icon(Icons.Filled.MonitorWeight, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Ajouter une pesée")
+            }
+        }
+        if (entries.isEmpty()) {
+            item {
+                Text(
+                    "Note ton poids régulièrement (par exemple chaque semaine, le matin à jeun) pour suivre son évolution.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            val first = entries.first()
+            val last = entries.last()
+            val diff = last.weightKg - first.weightKg
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatTile("Actuel", "${formatWeight(last.weightKg)} kg", Modifier.weight(1f))
+                    StatTile(
+                        "Évolution",
+                        (if (diff > 0) "+" else "") + "${formatWeight(Math.round(diff * 10) / 10.0)} kg",
+                        Modifier.weight(1f),
+                        detail = "depuis le ${formatLongDate(first.date)}".takeIf { entries.size > 1 },
+                    )
+                }
+            }
+            if (entries.size > 1) {
+                item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("Poids de corps", style = MaterialTheme.typography.titleSmall)
+                            LineChart(
+                                points = entries.map { ChartPoint(it.date, it.weightKg) },
+                                formatValue = { formatWeight(Math.round(it * 10) / 10.0) },
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            item { Text("Historique des pesées", style = MaterialTheme.typography.titleMedium) }
+            val reversed = entries.asReversed()
+            items(reversed.size, key = { reversed[it].id }) { i ->
+                val e = reversed[i]
+                val before = reversed.getOrNull(i + 1)
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${formatWeight(e.weightKg)} kg", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "${formatLongDate(e.date)} · ${formatTime(e.date)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (before != null) {
+                        val d = Math.round((e.weightKg - before.weightKg) * 10) / 10.0
+                        if (d != 0.0) {
+                            Text(
+                                (if (d > 0) "+" else "") + formatWeight(d) + " kg",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    IconButton(onClick = { toDelete = e }) { Icon(Icons.Outlined.Delete, "Supprimer la pesée") }
+                }
+                HorizontalDivider()
+            }
+        }
+    }
+
+    if (showAdd) {
+        var value by remember { mutableStateOf(entries.lastOrNull()?.let { formatWeight(it.weightKg) } ?: "") }
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("Nouvelle pesée") },
+            text = { NumberStepper("Poids (kg)", value, { value = it }, step = 0.1, decimal = true) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        parseWeight(value)?.takeIf { it > 0 }?.let { vm.addBodyWeight(it) }
+                        showAdd = false
+                    },
+                    enabled = (parseWeight(value) ?: 0.0) > 0,
+                ) { Text("Enregistrer") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Annuler") } },
+        )
+    }
+    toDelete?.let { e ->
+        ConfirmDialog(
+            title = "Supprimer cette pesée ?",
+            message = "${formatWeight(e.weightKg)} kg le ${formatLongDate(e.date)}",
+            confirmLabel = "Supprimer",
+            onDismiss = { toDelete = null },
+            onConfirm = { vm.deleteBodyWeight(e); toDelete = null },
+        )
     }
 }
 
@@ -191,7 +332,7 @@ private fun SessionStatRow(date: Long, best: String, detail: String, delta: Doub
             val positive = delta > 0
             Text(
                 (if (positive) "▲ +" else "▼ ") + formatWeight(Math.round(delta * 2) / 2.0) + " $unit",
-                color = if (positive) Color(0xFF2E9E5B) else MaterialTheme.colorScheme.error,
+                color = if (positive) PositiveGreen else MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.width(110.dp),
             )

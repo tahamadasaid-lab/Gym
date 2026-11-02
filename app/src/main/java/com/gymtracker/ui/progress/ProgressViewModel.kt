@@ -2,6 +2,7 @@ package com.gymtracker.ui.progress
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gymtracker.data.BodyWeight
 import com.gymtracker.data.Exercise
 import com.gymtracker.data.ExerciseSessionStat
 import com.gymtracker.data.WorkoutRepository
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 enum class Metric(val label: String, val unit: String) {
     MaxWeight("Poids max", "kg"),
@@ -60,6 +62,14 @@ class ProgressViewModel(private val repo: WorkoutRepository) : ViewModel() {
     fun selectMetric(m: Metric) {
         metric.value = m
     }
+
+    val tab = MutableStateFlow(0)
+
+    val bodyWeights: StateFlow<List<BodyWeight>> =
+        repo.observeBodyWeights().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun addBodyWeight(kg: Double) = viewModelScope.launch { repo.addBodyWeight(kg) }
+    fun deleteBodyWeight(entry: BodyWeight) = viewModelScope.launch { repo.deleteBodyWeight(entry) }
 }
 
 fun ExerciseSessionStat.valueOf(metric: Metric): Double = when (metric) {

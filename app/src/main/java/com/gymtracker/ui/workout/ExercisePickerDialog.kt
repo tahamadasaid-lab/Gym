@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.gymtracker.data.Exercise
+import com.gymtracker.ui.components.ExerciseAvatar
 
 @Composable
 fun ExercisePickerDialog(
@@ -69,6 +70,7 @@ fun ExercisePickerDialog(
                         ListItem(
                             headlineContent = { Text(ex.name) },
                             supportingContent = { Text(ex.muscleGroup) },
+                            leadingContent = { ExerciseAvatar(ex, size = 40.dp) },
                             trailingContent = if (ex.id in alreadyAdded) {
                                 { Icon(Icons.Filled.Check, "Déjà dans la séance") }
                             } else null,

@@ -4,21 +4,56 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Exercise::class, WorkoutSession::class, SessionExercise::class, WorkoutSet::class],
-    version = 1,
+    entities = [
+        Exercise::class,
+        WorkoutSession::class,
+        SessionExercise::class,
+        WorkoutSet::class,
+        Program::class,
+        ProgramExercise::class,
+        BodyWeight::class,
+    ],
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun workoutDao(): WorkoutDao
+    abstract fun programDao(): ProgramDao
+    abstract fun bodyWeightDao(): BodyWeightDao
 
     companion object {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "gymtracker.db")
                 .addCallback(SeedCallback)
+                .addMigrations(MIGRATION_1_2)
                 .build()
+    }
+}
+
+/** v2 : photos d'exercices, programmes, objectifs de séries, poids de corps. Conserve toutes les données. */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `exercises` ADD COLUMN `imageUri` TEXT")
+        db.execSQL("ALTER TABLE `session_exercises` ADD COLUMN `targetSets` INTEGER")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `programs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `program_exercises` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `programId` INTEGER NOT NULL, " +
+                "`exerciseId` INTEGER NOT NULL, `position` INTEGER NOT NULL, `targetSets` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`programId`) REFERENCES `programs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`exerciseId`) REFERENCES `exercises`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_program_exercises_programId` ON `program_exercises` (`programId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_program_exercises_exerciseId` ON `program_exercises` (`exerciseId`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `body_weights` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` INTEGER NOT NULL, `weightKg` REAL NOT NULL)"
+        )
     }
 }
 

@@ -14,6 +14,8 @@ data class Exercise(
     val muscleGroup: String,
     /** Temps de repos par défaut entre deux séries, en secondes. */
     val defaultRestSeconds: Int = 90,
+    /** Chemin local d'une photo choisie par l'utilisateur (null = visuel par défaut). */
+    val imageUri: String? = null,
 )
 
 @Entity(tableName = "sessions")
@@ -47,6 +49,8 @@ data class SessionExercise(
     val sessionId: Long,
     val exerciseId: Long,
     val position: Int,
+    /** Nombre de séries prévues (quand la séance vient d'un programme). */
+    val targetSets: Int? = null,
 )
 
 /** Une série : poids × répétitions, avec le temps de repos pris avant elle. */
@@ -96,5 +100,60 @@ data class SetHistoryRow(
     val sessionId: Long,
     val date: Long,
     val reps: Int,
+    val weightKg: Double,
+)
+
+/** Programme (modèle de séance), ex. « Push », « Pull », « Legs ». */
+@Entity(tableName = "programs")
+data class Program(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+)
+
+@Entity(
+    tableName = "program_exercises",
+    foreignKeys = [
+        ForeignKey(
+            entity = Program::class,
+            parentColumns = ["id"],
+            childColumns = ["programId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = Exercise::class,
+            parentColumns = ["id"],
+            childColumns = ["exerciseId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("programId"), Index("exerciseId")],
+)
+data class ProgramExercise(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val programId: Long,
+    val exerciseId: Long,
+    val position: Int,
+    val targetSets: Int,
+)
+
+data class ProgramExerciseWithExercise(
+    @Embedded val item: ProgramExercise,
+    @Relation(parentColumn = "exerciseId", entityColumn = "id")
+    val exercise: Exercise,
+)
+
+data class ProgramWithExercises(
+    @Embedded val program: Program,
+    @Relation(entity = ProgramExercise::class, parentColumn = "id", entityColumn = "programId")
+    val items: List<ProgramExerciseWithExercise>,
+) {
+    val orderedItems: List<ProgramExerciseWithExercise> get() = items.sortedBy { it.item.position }
+}
+
+/** Pesée (poids de corps). */
+@Entity(tableName = "body_weights")
+data class BodyWeight(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val date: Long,
     val weightKg: Double,
 )

@@ -27,6 +27,12 @@ interface WorkoutDao {
     @Delete
     suspend fun deleteExercise(exercise: Exercise)
 
+    @Query("SELECT * FROM exercises")
+    suspend fun getAllExercises(): List<Exercise>
+
+    @Query("UPDATE exercises SET imageUri = :imageUri WHERE id = :id")
+    suspend fun updateImage(id: Long, imageUri: String?)
+
     @Query("UPDATE exercises SET defaultRestSeconds = :seconds WHERE id = :id")
     suspend fun updateRest(id: Long, seconds: Int)
 
@@ -57,6 +63,13 @@ interface WorkoutDao {
     @Query("SELECT * FROM sessions WHERE endedAt IS NOT NULL ORDER BY startedAt DESC")
     fun observeFinishedSessions(): Flow<List<SessionWithExercises>>
 
+    @Transaction
+    @Query("SELECT * FROM sessions ORDER BY startedAt")
+    suspend fun getAllSessions(): List<SessionWithExercises>
+
+    @Query("SELECT COUNT(*) FROM sessions WHERE startedAt BETWEEN :startedAt AND :startedAt + 999")
+    suspend fun countSessionsStartedAt(startedAt: Long): Int
+
     // --- Exercices d'une séance ---
     @Query("SELECT COALESCE(MAX(position), -1) FROM session_exercises WHERE sessionId = :sessionId")
     suspend fun maxPosition(sessionId: Long): Int
@@ -73,6 +86,22 @@ interface WorkoutDao {
 
     @Delete
     suspend fun deleteSet(set: WorkoutSet)
+
+    @Update
+    suspend fun updateSet(set: WorkoutSet)
+
+    @Insert
+    suspend fun insertSets(sets: List<WorkoutSet>)
+
+    @Query("SELECT MAX(completedAt) FROM sets WHERE sessionExerciseId = :sessionExerciseId")
+    suspend fun lastCompletedAt(sessionExerciseId: Long): Long?
+
+    @Query(
+        """SELECT s.startedAt FROM sessions s
+           JOIN session_exercises se ON se.sessionId = s.id
+           WHERE se.id = :sessionExerciseId"""
+    )
+    suspend fun sessionStartFor(sessionExerciseId: Long): Long?
 
     @Query(
         """SELECT ws.* FROM sets ws
