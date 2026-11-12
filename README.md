@@ -42,6 +42,9 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 - Graphique de l'évolution par séance : poids max, 1RM estimé, volume ou reps max.
 - **Poids de corps** : pesées, graphique et évolution.
 
+### Apparence
+- Thème **Système / Clair / Sombre** au choix (⚙ Réglages), et option **noir intégral** pour écrans OLED.
+
 ### Exercices et catégories
 - Bibliothèque pré-remplie (~20 exercices classiques), recherche, classement par catégorie.
 - **Catégories personnalisables** (Exercices › Catégories) : ajoute Fessiers, Mollets, Avant-bras…,

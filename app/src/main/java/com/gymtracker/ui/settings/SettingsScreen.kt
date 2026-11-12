@@ -15,6 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -22,6 +26,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.gymtracker.settings.ThemeMode
 import com.gymtracker.ui.AppViewModelProvider
 import com.gymtracker.ui.components.LocalCalories
 import com.gymtracker.ui.components.NumberStepper
@@ -60,6 +68,51 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item { SectionHeader("Apparence") }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Thème", style = MaterialTheme.typography.titleSmall)
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            val modes = ThemeMode.entries
+                            modes.forEachIndexed { i, mode ->
+                                SegmentedButton(
+                                    selected = s.themeMode == mode,
+                                    onClick = { vm.update { it.copy(themeMode = mode) } },
+                                    shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
+                                    icon = {
+                                        SegmentedButtonDefaults.Icon(active = s.themeMode == mode) {
+                                            Icon(
+                                                when (mode) {
+                                                    ThemeMode.SYSTEM -> Icons.Filled.BrightnessAuto
+                                                    ThemeMode.LIGHT -> Icons.Filled.LightMode
+                                                    ThemeMode.DARK -> Icons.Filled.DarkMode
+                                                },
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SegmentedButtonDefaults.IconSize),
+                                            )
+                                        }
+                                    },
+                                ) { Text(mode.label) }
+                            }
+                        }
+                        Text(
+                            "« Système » suit le réglage clair / sombre de ton téléphone.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (s.themeMode != ThemeMode.LIGHT) {
+                        HorizontalDivider()
+                        SwitchRow(
+                            "Noir intégral",
+                            "Fond entièrement noir en thème sombre : plus contrasté et économise la batterie sur les écrans OLED.",
+                            s.pureBlack,
+                        ) { v -> vm.update { it.copy(pureBlack = v) } }
+                    }
+                }
+            }
+
             item { SectionHeader("Fin du repos") }
             item {
                 Card(Modifier.fillMaxWidth()) {

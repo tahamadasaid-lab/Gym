@@ -5,7 +5,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+enum class ThemeMode(val label: String) { SYSTEM("Système"), LIGHT("Clair"), DARK("Sombre") }
+
 data class AppSettings(
+    /** Thème de l'application : suit le téléphone, ou forcé clair / sombre. */
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** En thème sombre : fond noir intégral (économise la batterie sur écran OLED). */
+    val pureBlack: Boolean = false,
     /** Bips sonores à la fin du repos (joués dans les écouteurs s'ils sont branchés). */
     val soundEnabled: Boolean = true,
     /** Annonce vocale « Repos terminé, série suivante : … ». */
@@ -26,6 +32,8 @@ class SettingsStore(context: Context) {
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     private fun load() = AppSettings(
+        themeMode = runCatching { ThemeMode.valueOf(prefs.getString("theme", null) ?: "") }.getOrDefault(ThemeMode.SYSTEM),
+        pureBlack = prefs.getBoolean("pure_black", false),
         soundEnabled = prefs.getBoolean("sound", true),
         voiceEnabled = prefs.getBoolean("voice", true),
         warningEnabled = prefs.getBoolean("warning", true),
@@ -37,6 +45,8 @@ class SettingsStore(context: Context) {
     fun update(transform: (AppSettings) -> AppSettings) {
         val s = transform(_settings.value)
         prefs.edit()
+            .putString("theme", s.themeMode.name)
+            .putBoolean("pure_black", s.pureBlack)
             .putBoolean("sound", s.soundEnabled)
             .putBoolean("voice", s.voiceEnabled)
             .putBoolean("warning", s.warningEnabled)

@@ -84,16 +84,32 @@ private val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(32.dp),
 )
 
+/** Variante « noir intégral » pour écrans OLED. */
+private val PureBlackColors = DarkColors.copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF0B0C0F),
+    surfaceContainer = Color(0xFF111317),
+    surfaceContainerHigh = Color(0xFF181B20),
+    surfaceContainerHighest = Color(0xFF1F2228),
+)
+
 /** Vert « progression ». */
 val PositiveGreen = Color(0xFF3DCB7F)
 
 @Composable
 fun GymTrackerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    pureBlack: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = when {
+            !darkTheme -> LightColors
+            pureBlack -> PureBlackColors
+            else -> DarkColors
+        },
         typography = AppTypography,
         shapes = AppShapes,
         content = content,

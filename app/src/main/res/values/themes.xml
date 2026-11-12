@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.GymTracker" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#0E1014</item>
+    <style name="Theme.GymTracker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F7F7FA</item>
     </style>
 </resources>
