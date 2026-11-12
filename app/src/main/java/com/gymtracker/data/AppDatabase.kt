@@ -16,20 +16,22 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Program::class,
         ProgramExercise::class,
         BodyWeight::class,
+        MuscleGroup::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun workoutDao(): WorkoutDao
     abstract fun programDao(): ProgramDao
     abstract fun bodyWeightDao(): BodyWeightDao
+    abstract fun categoryDao(): CategoryDao
 
     companion object {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "gymtracker.db")
                 .addCallback(SeedCallback)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }
@@ -54,6 +56,19 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS `body_weights` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` INTEGER NOT NULL, `weightKg` REAL NOT NULL)"
         )
+    }
+}
+
+/** v3 : catégories (groupes musculaires) personnalisables. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `muscle_groups` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`name` TEXT NOT NULL, `colorArgb` INTEGER NOT NULL, `icon` TEXT NOT NULL, `met` REAL NOT NULL, " +
+                "`position` INTEGER NOT NULL)"
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_muscle_groups_name` ON `muscle_groups` (`name`)")
+        DefaultCategories.seed(db)
     }
 }
 
@@ -91,5 +106,6 @@ private object SeedCallback : RoomDatabase.Callback() {
                 arrayOf<Any>(name, group, rest),
             )
         }
+        DefaultCategories.seed(db)
     }
 }

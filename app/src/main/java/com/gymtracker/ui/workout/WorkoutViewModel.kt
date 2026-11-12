@@ -3,7 +3,9 @@ package com.gymtracker.ui.workout
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gymtracker.data.Effort
 import com.gymtracker.data.Exercise
+import com.gymtracker.data.efforts
 import com.gymtracker.data.ProgramWithExercises
 import com.gymtracker.data.SessionExerciseWithSets
 import com.gymtracker.data.SessionSummary
@@ -37,6 +39,7 @@ sealed interface WorkoutUiState {
         val sessionsThisWeek: Int,
         val totalSessions: Int,
         val weekVolume: Double,
+        val weekEfforts: List<Effort>,
         val recent: List<SessionSummary>,
         val programs: List<ProgramWithExercises>,
     ) : WorkoutUiState
@@ -65,6 +68,7 @@ class WorkoutViewModel(
                     sessionsThisWeek = week.size,
                     totalSessions = finished.size,
                     weekVolume = week.sumOf { it.summary().volume },
+                    weekEfforts = week.flatMap { it.efforts() },
                     recent = finished.take(3).map { it.summary() },
                     programs = programs,
                 )

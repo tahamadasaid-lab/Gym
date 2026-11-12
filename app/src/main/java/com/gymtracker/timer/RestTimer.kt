@@ -2,8 +2,6 @@ package com.gymtracker.timer
 
 import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
-import android.media.ToneGenerator
 import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
@@ -11,6 +9,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.content.ContextCompat
+import com.gymtracker.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -27,7 +26,14 @@ import kotlinx.coroutines.launch
  *   et sur l'écran de verrouillage) et un wake lock garantit l'alerte même écran éteint.
  * - À la fin : vibration, bip et notification « Repos terminé ».
  */
-class RestTimer(private val context: Context, private val scope: CoroutineScope) {
+class RestTimer(
+    private val context: Context,
+    private val scope: CoroutineScope,
+    private val settings: SettingsStore,
+) {
+    private val player = AlertPlayer(context, scope)
+    private var warned = false
+
 
     data class State(
         val totalSeconds: Int = 0,
@@ -58,6 +64,8 @@ class RestTimer(private val context: Context, private val scope: CoroutineScope)
         if (seconds <= 0) return
         endAt = SystemClock.elapsedRealtime() + seconds * 1000L
         _state.value = State(seconds, seconds, true, label, wallEnd())
+        warned = seconds <= WARNING_SECONDS * 2
+        player.prepare()
         Notifications.cancelFinished(context)
         holdWakeLock(seconds)
         startService()
@@ -72,6 +80,7 @@ class RestTimer(private val context: Context, private val scope: CoroutineScope)
             finish()
         } else {
             holdWakeLock(remaining)
+            if (remaining > WARNING_SECONDS) warned = false
             _state.update {
                 it.copy(
                     totalSeconds = maxOf(it.totalSeconds + deltaSeconds, remaining),
@@ -103,6 +112,10 @@ class RestTimer(private val context: Context, private val scope: CoroutineScope)
                     break
                 }
                 _state.update { it.copy(remainingSeconds = r) }
+                if (!warned && r <= WARNING_SECONDS) {
+                    warned = true
+                    player.playWarning(settings.settings.value, WARNING_SECONDS)
+                }
                 delay(200)
             }
         }
@@ -115,7 +128,7 @@ class RestTimer(private val context: Context, private val scope: CoroutineScope)
         alert()
         Notifications.showFinished(context, label)
         scope.launch {
-            delay(3_000) // laisse le temps au bip / à la vibration
+            delay(8_000) // laisse le temps aux bips, à l'annonce vocale et à la vibration
             releaseWakeLock()
         }
     }
@@ -134,23 +147,25 @@ class RestTimer(private val context: Context, private val scope: CoroutineScope)
         runCatching { wakeLock?.takeIf { it.isHeld }?.release() }
     }
 
-    private fun alert() {
-        runCatching {
-            val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                context.getSystemService(VibratorManager::class.java)?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Vibrator::class.java)
-            }
-            vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 400, 200, 400, 200, 700), -1))
-        }
-        scope.launch {
+    /** Joue l'alerte de fin selon les réglages (aussi utilisé par le bouton « Tester »). */
+    fun alert(label: String = _state.value.label) {
+        val prefs = settings.settings.value
+        if (prefs.vibrationEnabled) {
             runCatching {
-                val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 90)
-                tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 800)
-                delay(1000)
-                tone.release()
+                val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.getSystemService(Vibrator::class.java)
+                }
+                vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 400, 200, 400, 200, 700), -1))
             }
         }
+        player.prepare()
+        player.playEnd(prefs, label)
+    }
+
+    private companion object {
+        const val WARNING_SECONDS = 10
     }
 }

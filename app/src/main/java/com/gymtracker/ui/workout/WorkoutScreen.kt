@@ -74,7 +74,12 @@ import com.gymtracker.data.SessionExerciseWithSets
 import com.gymtracker.data.SessionSummary
 import com.gymtracker.data.SessionWithExercises
 import com.gymtracker.data.WorkoutSet
+import com.gymtracker.data.effort
+import com.gymtracker.data.efforts
 import com.gymtracker.data.volume
+import com.gymtracker.ui.components.LocalCalories
+import com.gymtracker.ui.components.formatKcal
+import androidx.compose.material.icons.filled.Settings
 import com.gymtracker.ui.AppViewModelProvider
 import com.gymtracker.ui.components.ConfirmDialog
 import com.gymtracker.ui.components.EditSetDialog
@@ -97,6 +102,7 @@ import kotlinx.coroutines.delay
 fun WorkoutScreen(
     onOpenSession: (Long) -> Unit,
     onOpenProgram: (Long?) -> Unit,
+    onOpenSettings: () -> Unit,
     vm: WorkoutViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -110,8 +116,9 @@ fun WorkoutScreen(
             onStartProgram = { vm.startProgram(it) },
             onOpenProgram = onOpenProgram,
             onOpenSession = onOpenSession,
+            onOpenSettings = onOpenSettings,
         )
-        is WorkoutUiState.Active -> ActiveSessionScreen(s.session, vm)
+        is WorkoutUiState.Active -> ActiveSessionScreen(s.session, vm, onOpenSettings)
     }
 }
 
@@ -124,8 +131,12 @@ private fun HomeScreen(
     onStartProgram: (Long) -> Unit,
     onOpenProgram: (Long?) -> Unit,
     onOpenSession: (Long) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
-    ScreenScaffold(title = "GymTracker") { padding ->
+    ScreenScaffold(
+        title = "GymTracker",
+        actions = { IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, "Réglages") } },
+    ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
@@ -193,7 +204,7 @@ private fun HeroCard(state: WorkoutUiState.NoSession, onStart: () -> Unit) {
                 color = Color.White.copy(alpha = 0.9f),
             )
             Text(
-                "${state.totalSessions} séance(s) au total",
+                "${formatKcal(LocalCalories.current.kcal(state.weekEfforts))} brûlées cette semaine · ${state.totalSessions} séance(s) au total",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.75f),
             )
@@ -265,7 +276,7 @@ private fun RecentSessionCard(s: SessionSummary, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(formatLongDate(s.startedAt), style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "${formatDurationHuman(s.durationSeconds)} · ${s.setCount} séries · ${formatVolume(s.volume)}",
+                    "${formatDurationHuman(s.durationSeconds)} · ${s.setCount} séries · ${formatVolume(s.volume)} · ${formatKcal(LocalCalories.current.kcal(s.efforts))}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -287,7 +298,7 @@ private fun RecentSessionCard(s: SessionSummary, onClick: () -> Unit) {
 // =====================================================================================  Séance en cours
 
 @Composable
-private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewModel) {
+private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewModel, onOpenSettings: () -> Unit) {
     val previous by vm.previous.collectAsStateWithLifecycle()
     val exercises by vm.exercises.collectAsStateWithLifecycle()
 
@@ -316,7 +327,9 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
     }
     val allSets = session.exercises.flatMap { it.sets }
     val elapsed = (now - session.session.startedAt) / 1000
-    val subtitle = "${formatDuration(elapsed)} · ${allSets.size} séries · ${formatVolume(allSets.sumOf { it.volume })}"
+    val calories = LocalCalories.current
+    val sessionKcal = calories.kcal(session.efforts())
+    val subtitle = "${formatDuration(elapsed)} · ${allSets.size} séries · ${formatVolume(allSets.sumOf { it.volume })} · ${formatKcal(sessionKcal)}"
 
     ScreenScaffold(
         title = "Séance en cours",
@@ -331,6 +344,11 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
                         leadingIcon = { Icon(Icons.Filled.Bookmark, null) },
                         enabled = session.exercises.isNotEmpty(),
                         onClick = { menuOpen = false; showSaveProgram = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Réglages du minuteur") },
+                        leadingIcon = { Icon(Icons.Filled.Settings, null) },
+                        onClick = { menuOpen = false; onOpenSettings() },
                     )
                     DropdownMenuItem(
                         text = { Text("Annuler la séance") },
@@ -437,7 +455,8 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
         ConfirmDialog(
             title = "Terminer la séance ?",
             message = if (empty) "Aucune série n'a été enregistrée : la séance sera supprimée."
-            else "${allSets.size} séries · ${formatVolume(allSets.sumOf { it.volume })} en ${formatDurationHuman(elapsed)}. Bravo !",
+            else "${allSets.size} séries · ${formatVolume(allSets.sumOf { it.volume })} en ${formatDurationHuman(elapsed)}.\n" +
+                "Dépense estimée : ${formatKcal(sessionKcal)}. Bravo !",
             confirmLabel = "Terminer",
             onDismiss = { showFinish = false },
             onConfirm = { vm.finishSession(session); showFinish = false },
@@ -490,6 +509,14 @@ private fun ExerciseCard(
                     Spacer(Modifier.height(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         MuscleTag(item.exercise.muscleGroup)
+                        if (sets.isNotEmpty()) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                formatKcal(LocalCalories.current.kcal(item.effort())),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.tertiary,
+                            )
+                        }
                         if (target != null) {
                             Spacer(Modifier.width(6.dp))
                             Text(

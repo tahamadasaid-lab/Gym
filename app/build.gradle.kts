@@ -13,8 +13,8 @@ android {
         applicationId = "com.gymtracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "3.0"
     }
 
     // Clé de signature fixe (versionnée) : chaque nouvel APK peut s'installer par-dessus le précédent

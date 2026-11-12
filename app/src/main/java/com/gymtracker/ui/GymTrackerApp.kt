@@ -34,7 +34,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import com.gymtracker.GymApp
+import com.gymtracker.data.CalorieCalculator
+import com.gymtracker.ui.categories.CategoriesScreen
+import com.gymtracker.ui.components.LocalCalories
+import com.gymtracker.ui.components.LocalMuscleGroups
+import com.gymtracker.ui.settings.SettingsScreen
 import com.gymtracker.ui.components.RestTimerBar
 import com.gymtracker.ui.exercises.ExercisesScreen
 import com.gymtracker.ui.history.HistoryScreen
@@ -55,8 +62,20 @@ fun GymTrackerApp() {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val context = LocalContext.current
-    val timer = (context.applicationContext as GymApp).restTimer
+    val app = context.applicationContext as GymApp
+    val timer = app.restTimer
     val timerState by timer.state.collectAsStateWithLifecycle()
+
+    // Catégories et calcul des calories, partagés par tous les écrans.
+    val categoriesFlow = remember { app.repository.observeCategories() }
+    val bodyWeightsFlow = remember { app.repository.observeBodyWeights() }
+    val categories by categoriesFlow.collectAsStateWithLifecycle(emptyList())
+    val bodyWeights by bodyWeightsFlow.collectAsStateWithLifecycle(emptyList())
+    val settings by app.settings.settings.collectAsStateWithLifecycle()
+    val categoryMap = remember(categories) { categories.associateBy { it.name.lowercase() } }
+    val calories = remember(categories, bodyWeights, settings.profileWeightKg) {
+        CalorieCalculator.of(bodyWeights.lastOrNull()?.weightKg ?: settings.profileWeightKg, categories)
+    }
 
     // Android 13+ : autorisation d'afficher le minuteur dans les notifications.
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -71,6 +90,7 @@ fun GymTrackerApp() {
     fun openSession(id: Long) = nav.navigate("history/$id")
     fun openProgram(id: Long?) = nav.navigate("program/${id ?: -1L}")
 
+    CompositionLocalProvider(LocalMuscleGroups provides categoryMap, LocalCalories provides calories) {
     Scaffold(
         bottomBar = {
             Column {
@@ -101,7 +121,11 @@ fun GymTrackerApp() {
             modifier = Modifier.padding(bottom = padding.calculateBottomPadding()),
         ) {
             composable(Tab.Workout.route) {
-                WorkoutScreen(onOpenSession = ::openSession, onOpenProgram = ::openProgram)
+                WorkoutScreen(
+                    onOpenSession = ::openSession,
+                    onOpenProgram = ::openProgram,
+                    onOpenSettings = { nav.navigate("settings") },
+                )
             }
             composable(Tab.History.route) { HistoryScreen(onOpenSession = ::openSession) }
             composable(
@@ -117,7 +141,10 @@ fun GymTrackerApp() {
                 ProgramEditorScreen(onBack = { nav.popBackStack() })
             }
             composable(Tab.Progress.route) { ProgressScreen() }
-            composable(Tab.Exercises.route) { ExercisesScreen() }
+            composable(Tab.Exercises.route) { ExercisesScreen(onOpenCategories = { nav.navigate("categories") }) }
+            composable("categories") { CategoriesScreen(onBack = { nav.popBackStack() }) }
+            composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
         }
+    }
     }
 }

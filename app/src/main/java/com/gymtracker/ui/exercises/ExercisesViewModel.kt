@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gymtracker.data.Exercise
 import com.gymtracker.data.ImageStore
+import com.gymtracker.data.MuscleGroup
 import com.gymtracker.data.WorkoutRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +25,13 @@ class ExercisesViewModel(
 ) : ViewModel() {
     val exercises: StateFlow<List<Exercise>?> =
         repo.observeExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val categories: StateFlow<List<MuscleGroup>> =
+        repo.observeCategories().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun createCategory(group: MuscleGroup, onResult: (Boolean) -> Unit) = viewModelScope.launch {
+        onResult(repo.saveCategory(group, null) != null)
+    }
 
     /** onResult(true) si enregistré, false si le nom existe déjà. */
     fun save(exercise: Exercise, imageChange: ImageChange, onResult: (Boolean) -> Unit) = viewModelScope.launch {

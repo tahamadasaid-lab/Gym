@@ -64,22 +64,41 @@ import com.gymtracker.ui.components.ConfirmDialog
 import com.gymtracker.ui.components.ExerciseAvatar
 import com.gymtracker.ui.components.RestPickerDialog
 import com.gymtracker.ui.components.ScreenScaffold
-import com.gymtracker.ui.components.muscleStyle
+import com.gymtracker.ui.components.rememberMuscleStyle
+import com.gymtracker.ui.categories.CategoryEditDialog
+import com.gymtracker.ui.components.CategoryColors
+import com.gymtracker.ui.components.CategoryIcons
+import com.gymtracker.data.DefaultCategories
+import com.gymtracker.data.MuscleGroup
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import com.gymtracker.util.formatDuration
 
-private val defaultGroups = listOf("Pectoraux", "Dos", "Jambes", "Épaules", "Bras", "Abdos", "Cardio", "Autre")
-
 @Composable
-fun ExercisesScreen(vm: ExercisesViewModel = viewModel(factory = AppViewModelProvider.Factory)) {
+fun ExercisesScreen(
+    onOpenCategories: () -> Unit,
+    vm: ExercisesViewModel = viewModel(factory = AppViewModelProvider.Factory),
+) {
     val exercises by vm.exercises.collectAsStateWithLifecycle()
+    val categories by vm.categories.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<Exercise?>(null) }
     var query by remember { mutableStateOf("") }
 
     ScreenScaffold(
         title = "Exercices",
+        actions = {
+            TextButton(onClick = onOpenCategories) {
+                Icon(Icons.Filled.Category, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Catégories")
+            }
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { editing = Exercise(name = "", muscleGroup = "") },
+                onClick = { editing = Exercise(name = "", muscleGroup = DefaultCategories.OTHER) },
                 icon = { Icon(Icons.Filled.Add, null) },
                 text = { Text("Nouvel exercice") },
             )
@@ -107,12 +126,16 @@ fun ExercisesScreen(vm: ExercisesViewModel = viewModel(factory = AppViewModelPro
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
-            filtered.groupBy { it.muscleGroup }.forEach { (group, items) ->
+            val order = categories.mapIndexed { i, c -> c.name.lowercase() to i }.toMap()
+            filtered.groupBy { it.muscleGroup }
+                .entries
+                .sortedWith(compareBy({ order[it.key.lowercase()] ?: Int.MAX_VALUE }, { it.key }))
+                .forEach { (group, items) ->
                 item(key = "header-$group") {
                     Text(
                         "$group · ${items.size}",
                         style = MaterialTheme.typography.titleSmall,
-                        color = muscleStyle(group).color,
+                        color = rememberMuscleStyle(group).color,
                         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
                     )
                 }
@@ -130,10 +153,10 @@ fun ExercisesScreen(vm: ExercisesViewModel = viewModel(factory = AppViewModelPro
     }
 
     editing?.let { ex ->
-        val groups = (defaultGroups + exercises.orEmpty().map { it.muscleGroup }).distinct()
         ExerciseEditDialog(
             initial = ex,
-            groups = groups,
+            categories = categories,
+            onCreateCategory = vm::createCategory,
             onDismiss = { editing = null },
             onSave = { updated, image, onResult ->
                 vm.save(updated, image) { ok -> onResult(ok); if (ok) editing = null }
@@ -146,7 +169,8 @@ fun ExercisesScreen(vm: ExercisesViewModel = viewModel(factory = AppViewModelPro
 @Composable
 private fun ExerciseEditDialog(
     initial: Exercise,
-    groups: List<String>,
+    categories: List<MuscleGroup>,
+    onCreateCategory: (MuscleGroup, (Boolean) -> Unit) -> Unit,
     onDismiss: () -> Unit,
     onSave: (Exercise, ImageChange, (Boolean) -> Unit) -> Unit,
     onDelete: () -> Unit,
@@ -159,6 +183,7 @@ private fun ExerciseEditDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var pickRest by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var newCategory by remember { mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri != null) imageChange = ImageChange.Replace(uri)
@@ -218,15 +243,29 @@ private fun ExerciseEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = group,
-                    onValueChange = { group = it },
-                    label = { Text("Groupe musculaire") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Text("Catégorie", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    groups.forEach { g -> SuggestionChip(onClick = { group = g }, label = { Text(g) }) }
+                    val names = categories.map { it.name }
+                    // Groupe actuel absent des catégories (ancien exercice) : on l'affiche quand même.
+                    val all = if (group.isNotBlank() && names.none { it.equals(group, true) }) names + group else names
+                    all.forEach { g ->
+                        val c = categories.firstOrNull { it.name == g }
+                        FilterChip(
+                            selected = g.equals(group, ignoreCase = true),
+                            onClick = { group = g },
+                            label = { Text(g) },
+                            leadingIcon = c?.let {
+                                {
+                                    Box(Modifier.size(10.dp).clip(CircleShape).background(Color(it.colorArgb)))
+                                }
+                            },
+                        )
+                    }
+                    SuggestionChip(
+                        onClick = { newCategory = true },
+                        label = { Text("Nouvelle") },
+                        icon = { Icon(Icons.Filled.Add, null, Modifier.size(16.dp)) },
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 AssistChip(
@@ -256,6 +295,29 @@ private fun ExerciseEditDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 
+    if (newCategory) {
+        CategoryEditDialog(
+            initial = MuscleGroup(
+                name = "",
+                colorArgb = CategoryColors[categories.size % CategoryColors.size],
+                icon = CategoryIcons.first().first,
+                met = 5.0,
+                position = 0,
+            ),
+            exerciseCount = 0,
+            onDismiss = { newCategory = false },
+            onSave = { created, onResult ->
+                onCreateCategory(created) { ok ->
+                    onResult(ok)
+                    if (ok) {
+                        group = created.name
+                        newCategory = false
+                    }
+                }
+            },
+            onDelete = null,
+        )
+    }
     if (pickRest) {
         RestPickerDialog(
             exerciseName = name.ifBlank { "Nouvel exercice" },

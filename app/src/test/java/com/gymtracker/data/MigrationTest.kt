@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -34,13 +35,14 @@ class MigrationTest {
     )
 
     @Test
-    fun migrate1To2_keepsData() = runBlocking {
+    fun migrate1To3_keepsData() = runBlocking {
         val name = "migration-test.db"
         context.deleteDatabase(name)
         val file = context.getDatabasePath(name).apply { parentFile?.mkdirs() }
         SQLiteDatabase.openOrCreateDatabase(file, null).use { db ->
             v1Schema.forEach(db::execSQL)
             db.execSQL("INSERT INTO exercises (id, name, muscleGroup, defaultRestSeconds) VALUES (1, 'Squat', 'Jambes', 150)")
+            db.execSQL("INSERT INTO exercises (id, name, muscleGroup, defaultRestSeconds) VALUES (2, 'Hip thrust', 'Fessiers', 90)")
             db.execSQL("INSERT INTO sessions (id, startedAt, endedAt) VALUES (1, 1000, 5000)")
             db.execSQL("INSERT INTO session_exercises (id, sessionId, exerciseId, position) VALUES (1, 1, 1, 0)")
             db.execSQL("INSERT INTO sets (sessionExerciseId, reps, weightKg, completedAt, restSeconds) VALUES (1, 8, 100.0, 2000, NULL)")
@@ -49,7 +51,7 @@ class MigrationTest {
         }
 
         val room = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .allowMainThreadQueries()
             .build()
         try {
@@ -60,6 +62,11 @@ class MigrationTest {
             assertNull(ex.exercise.imageUri)
             assertNull(ex.sessionExercise.targetSets)
             assertEquals(listOf(100.0, 105.0), ex.orderedSets.map { it.weightKg })
+
+            // v3 : catégories par défaut + groupes déjà utilisés par les exercices.
+            val categories = room.categoryDao().observeAll().first().map { it.name }
+            assertTrue(categories.containsAll(listOf("Pectoraux", "Jambes", "Autre", "Fessiers")))
+            assertEquals(categories.size, categories.toSet().size)
 
             // Les nouvelles tables fonctionnent.
             val repo = WorkoutRepository(room)

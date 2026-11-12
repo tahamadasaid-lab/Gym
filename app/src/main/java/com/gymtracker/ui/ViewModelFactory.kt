@@ -6,7 +6,9 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.gymtracker.GymApp
+import com.gymtracker.ui.categories.CategoriesViewModel
 import com.gymtracker.ui.exercises.ExercisesViewModel
+import com.gymtracker.ui.settings.SettingsViewModel
 import com.gymtracker.ui.history.HistoryViewModel
 import com.gymtracker.ui.history.SessionDetailViewModel
 import com.gymtracker.ui.programs.ProgramEditorViewModel
@@ -21,6 +23,8 @@ object AppViewModelProvider {
         initializer { ProgramEditorViewModel(createSavedStateHandle(), app().repository) }
         initializer { ProgressViewModel(app().repository) }
         initializer { ExercisesViewModel(app().repository, app().imageStore) }
+        initializer { CategoriesViewModel(app().repository) }
+        initializer { SettingsViewModel(app().settings, app().restTimer) }
     }
 }
 

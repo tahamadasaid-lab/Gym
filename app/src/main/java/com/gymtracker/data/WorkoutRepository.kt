@@ -11,6 +11,47 @@ class WorkoutRepository(private val db: AppDatabase) {
     private val dao = db.workoutDao()
     private val programDao = db.programDao()
     private val bodyDao = db.bodyWeightDao()
+    private val categoryDao = db.categoryDao()
+
+    // ---------------------------------------------------------------- Catégories
+    fun observeCategories(): Flow<List<MuscleGroup>> = categoryDao.observeAll()
+
+    /** Crée la catégorie si elle n'existe pas encore. Retourne son nom tel qu'enregistré. */
+    suspend fun ensureCategory(name: String): String {
+        val clean = name.trim().ifEmpty { DefaultCategories.OTHER }
+        categoryDao.findByName(clean)?.let { return it.name }
+        categoryDao.insert(
+            MuscleGroup(
+                name = clean,
+                colorArgb = DefaultCategories.DEFAULT_COLOR,
+                icon = DefaultCategories.DEFAULT_ICON,
+                met = DefaultCategories.DEFAULT_MET,
+                position = categoryDao.maxPosition() + 1,
+            )
+        )
+        return clean
+    }
+
+    /** Crée ou modifie une catégorie (le renommage est répercuté sur les exercices). Null si le nom est déjà pris. */
+    suspend fun saveCategory(group: MuscleGroup, previousName: String?): Long? = db.withTransaction {
+        val clean = group.copy(name = group.name.trim())
+        val existing = categoryDao.findByName(clean.name)
+        if (existing != null && existing.id != clean.id) return@withTransaction null
+        if (clean.id == 0L) {
+            categoryDao.insert(clean.copy(position = categoryDao.maxPosition() + 1))
+        } else {
+            categoryDao.update(clean)
+            if (previousName != null && previousName != clean.name) categoryDao.moveExercises(previousName, clean.name)
+            clean.id
+        }
+    }
+
+    /** Supprime une catégorie ; ses exercices passent dans « Autre ». */
+    suspend fun deleteCategory(group: MuscleGroup) = db.withTransaction {
+        val other = ensureCategory(DefaultCategories.OTHER)
+        categoryDao.moveExercises(group.name, other)
+        if (!group.name.equals(other, ignoreCase = true)) categoryDao.delete(group)
+    }
 
     // ---------------------------------------------------------------- Exercices
     fun observeExercises(): Flow<List<Exercise>> = dao.observeExercises()
@@ -22,7 +63,7 @@ class WorkoutRepository(private val db: AppDatabase) {
         if (existing != null && existing.id != exercise.id) return null
         val clean = exercise.copy(
             name = exercise.name.trim(),
-            muscleGroup = exercise.muscleGroup.trim().ifEmpty { "Autre" },
+            muscleGroup = ensureCategory(exercise.muscleGroup),
         )
         return if (clean.id == 0L) dao.insertExercise(clean) else { dao.updateExercise(clean); clean.id }
     }
@@ -33,7 +74,7 @@ class WorkoutRepository(private val db: AppDatabase) {
 
     suspend fun findOrCreateExercise(name: String, muscleGroup: String = "Autre"): Long {
         dao.findExerciseByName(name.trim())?.let { return it.id }
-        return dao.insertExercise(Exercise(name = name.trim(), muscleGroup = muscleGroup.ifBlank { "Autre" }))
+        return dao.insertExercise(Exercise(name = name.trim(), muscleGroup = ensureCategory(muscleGroup)))
     }
 
     // ---------------------------------------------------------------- Séances

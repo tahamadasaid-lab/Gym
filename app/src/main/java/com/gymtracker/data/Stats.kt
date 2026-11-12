@@ -9,6 +9,41 @@ fun estimatedOneRepMax(weightKg: Double, reps: Int): Double = when {
 
 val WorkoutSet.volume: Double get() = weightKg * reps
 
+/** Temps actif estimé passé sur un exercice (exécution + repos), utilisé pour les calories. */
+data class Effort(val muscleGroup: String, val activeSeconds: Long)
+
+/**
+ * Durée attribuée à une série : le repos réel mesuré avant elle (il inclut l'exécution),
+ * plafonné à 10 min ; sinon (première série, série ajoutée après coup) une estimation.
+ */
+fun WorkoutSet.attributedSeconds(): Long =
+    restSeconds?.toLong()?.coerceIn(0, 600) ?: (reps * 4L + 60)
+
+fun SessionExerciseWithSets.effort(): Effort =
+    Effort(exercise.muscleGroup, sets.sumOf { it.attributedSeconds() })
+
+fun SessionWithExercises.efforts(): List<Effort> =
+    exercises.filter { it.sets.isNotEmpty() }.map { it.effort() }
+
+/**
+ * Estimation des calories : kcal = MET × poids (kg) × durée (h).
+ * Le MET dépend de la catégorie de l'exercice (réglable dans les catégories).
+ */
+class CalorieCalculator(
+    val bodyWeightKg: Double,
+    private val metByGroup: Map<String, Double>,
+) {
+    fun met(group: String): Double = metByGroup[group.lowercase()] ?: DefaultCategories.DEFAULT_MET
+    fun kcal(effort: Effort): Double = met(effort.muscleGroup) * bodyWeightKg * effort.activeSeconds / 3600.0
+    fun kcal(efforts: List<Effort>): Double = efforts.sumOf { kcal(it) }
+
+    companion object {
+        val Default = CalorieCalculator(75.0, emptyMap())
+        fun of(bodyWeightKg: Double, groups: List<MuscleGroup>) =
+            CalorieCalculator(bodyWeightKg, groups.associate { it.name.lowercase() to it.met })
+    }
+}
+
 data class SessionSummary(
     val id: Long,
     val startedAt: Long,
@@ -17,6 +52,7 @@ data class SessionSummary(
     val setCount: Int,
     val volume: Double,
     val averageRestSeconds: Int?,
+    val efforts: List<Effort> = emptyList(),
 ) {
     val durationSeconds: Long get() = ((endedAt ?: System.currentTimeMillis()) - startedAt) / 1000
 }
@@ -32,6 +68,7 @@ fun SessionWithExercises.summary(): SessionSummary {
         setCount = allSets.size,
         volume = allSets.sumOf { it.volume },
         averageRestSeconds = if (rests.isEmpty()) null else rests.average().toInt(),
+        efforts = efforts(),
     )
 }
 

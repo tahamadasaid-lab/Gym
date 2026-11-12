@@ -157,3 +157,17 @@ data class BodyWeight(
     val date: Long,
     val weightKg: Double,
 )
+
+/**
+ * Catégorie (groupe musculaire) personnalisable. Les exercices y sont rattachés par leur champ `muscleGroup`
+ * (= nom de la catégorie). `met` = intensité utilisée pour estimer les calories.
+ */
+@Entity(tableName = "muscle_groups", indices = [Index(value = ["name"], unique = true)])
+data class MuscleGroup(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val colorArgb: Int,
+    val icon: String,
+    val met: Double,
+    val position: Int,
+)

@@ -60,7 +60,10 @@ import com.gymtracker.data.SessionSummary
 import com.gymtracker.data.WorkoutSet
 import com.gymtracker.data.estimatedOneRepMax
 import com.gymtracker.data.summary
+import com.gymtracker.data.effort
 import com.gymtracker.data.volume
+import com.gymtracker.ui.components.LocalCalories
+import com.gymtracker.ui.components.formatKcal
 import com.gymtracker.ui.AppViewModelProvider
 import com.gymtracker.ui.components.ConfirmDialog
 import com.gymtracker.ui.components.EditSetDialog
@@ -167,7 +170,8 @@ fun HistoryScreen(
                         Column {
                             Text(title, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "${shown.size} séance(s) · ${shown.sumOf { it.setCount }} séries · ${formatVolume(shown.sumOf { it.volume })}",
+                                "${shown.size} séance(s) · ${shown.sumOf { it.setCount }} séries · ${formatVolume(shown.sumOf { it.volume })} · " +
+                                    formatKcal(LocalCalories.current.kcal(shown.flatMap { it.efforts })),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -196,7 +200,8 @@ private fun SessionCard(s: SessionSummary, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(formatLongDate(s.startedAt), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "${formatTime(s.startedAt)} · ${formatDurationHuman(s.durationSeconds)} · ${s.setCount} séries · ${formatVolume(s.volume)}",
+                    "${formatTime(s.startedAt)} · ${formatDurationHuman(s.durationSeconds)} · ${s.setCount} séries · ${formatVolume(s.volume)}\n" +
+                        "🔥 ${formatKcal(LocalCalories.current.kcal(s.efforts))}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -248,16 +253,22 @@ fun SessionDetailScreen(
             return@ScreenScaffold
         }
         val summary = s.summary()
+        val calories = LocalCalories.current
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatTile("Durée", formatDurationHuman(summary.durationSeconds), Modifier.weight(1f))
-                    StatTile("Séries", "${summary.setCount}", Modifier.weight(1f))
-                    StatTile("Volume", formatVolume(summary.volume), Modifier.weight(1.3f))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatTile("Durée", formatDurationHuman(summary.durationSeconds), Modifier.weight(1f))
+                        StatTile("Séries", "${summary.setCount}", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatTile("Volume", formatVolume(summary.volume), Modifier.weight(1f))
+                        StatTile("Calories", formatKcal(calories.kcal(summary.efforts)), Modifier.weight(1f), detail = "estimation")
+                    }
                 }
             }
             summary.averageRestSeconds?.let { avg ->
@@ -278,7 +289,7 @@ fun SessionDetailScreen(
                             Column(Modifier.weight(1f)) {
                                 Text(ex.exercise.name, style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    "${ex.sets.size} séries · ${formatVolume(ex.sets.sumOf { it.volume })}",
+                                    "${ex.sets.size} séries · ${formatVolume(ex.sets.sumOf { it.volume })} · ${formatKcal(calories.kcal(ex.effort()))}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
