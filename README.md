@@ -20,7 +20,15 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 - **Épinglé en bas de l'écran** sur tous les onglets : plus besoin de remonter pour voir le temps restant.
 - **Notification avec compte à rebours** (et boutons −15 s / +15 s / Passer) : le minuteur reste visible
   quand tu changes d'application ou sur l'écran de verrouillage.
-- Vibration, bip et notification « Repos terminé » à la fin, **même écran éteint**.
+- À la fin : **bips + annonce vocale** (« Repos terminé. Série suivante : Squat ») joués **dans les écouteurs**
+  (la musique baisse un instant), vibration et notification, **même écran éteint**.
+- Avertissement 10 secondes avant la fin ; option « sonner même en mode silencieux » (canal alarme).
+- Tout se règle dans **Réglages** (⚙ sur l'accueil), avec un bouton « Tester l'alerte ».
+
+### Calories
+- Dépense estimée **par exercice**, **par séance**, sur la semaine (accueil) et dans l'historique.
+- Calcul : intensité (MET) de la catégorie × ton poids × temps passé (séries + repos).
+- Poids : ta dernière pesée, sinon celui saisi dans les Réglages. C'est une estimation.
 - Le **temps de repos réel** entre deux séries est enregistré.
 
 ### Historique
@@ -34,8 +42,11 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 - Graphique de l'évolution par séance : poids max, 1RM estimé, volume ou reps max.
 - **Poids de corps** : pesées, graphique et évolution.
 
-### Exercices
-- Bibliothèque pré-remplie (~20 exercices classiques), recherche.
+### Exercices et catégories
+- Bibliothèque pré-remplie (~20 exercices classiques), recherche, classement par catégorie.
+- **Catégories personnalisables** (Exercices › Catégories) : ajoute Fessiers, Mollets, Avant-bras…,
+  choisis couleur, pictogramme et intensité. Renommer une catégorie met à jour ses exercices ;
+  la supprimer les déplace dans « Autre ».
 - **Photo par exercice** (ex. la machine ou son réglage), sinon pictogramme coloré du groupe musculaire.
 - Temps de repos par défaut par exercice.
 
@@ -78,7 +89,7 @@ app/src/main/java/com/gymtracker/
     └── theme/
 ```
 
-### Modèle de données (v2)
+### Modèle de données (v3)
 | Table | Contenu |
 |---|---|
 | `exercises` | nom, groupe musculaire, repos par défaut, photo |
@@ -87,8 +98,9 @@ app/src/main/java/com/gymtracker/
 | `sets` | poids, répétitions, heure, repos réel avant la série |
 | `programs` / `program_exercises` | programmes et leurs exercices |
 | `body_weights` | pesées |
+| `muscle_groups` | catégories : nom, couleur, pictogramme, intensité (MET) |
 
-La mise à jour v1 → v2 conserve toutes les données (migration testée dans `MigrationTest`).
+Les mises à jour (v1 → v2 → v3) conservent toutes les données (migrations testées dans `MigrationTest`).
 Tests : `./gradlew testDebugUnitTest`.
 
 ## Idées pour la suite
