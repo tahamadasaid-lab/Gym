@@ -1,5 +1,6 @@
 package com.gymtracker.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -51,6 +52,8 @@ data class SessionExercise(
     val position: Int,
     /** Nombre de séries prévues (quand la séance vient d'un programme). */
     val targetSets: Int? = null,
+    /** Exercices consécutifs ayant la même valeur = une supersérie (enchaînés sans repos). */
+    val supersetGroup: Long? = null,
 )
 
 /** Une série : poids × répétitions, avec le temps de repos pris avant elle. */
@@ -74,6 +77,9 @@ data class WorkoutSet(
     val completedAt: Long,
     /** Repos réel écoulé depuis la série précédente de la séance (null pour la première). */
     val restSeconds: Int?,
+    /** Série dégressive : charge réduite enchaînée sans repos après la série précédente. */
+    @ColumnInfo(defaultValue = "0")
+    val isDropSet: Boolean = false,
 )
 
 data class SessionExerciseWithSets(
@@ -134,6 +140,7 @@ data class ProgramExercise(
     val exerciseId: Long,
     val position: Int,
     val targetSets: Int,
+    val supersetGroup: Long? = null,
 )
 
 data class ProgramExerciseWithExercise(
@@ -171,3 +178,14 @@ data class MuscleGroup(
     val met: Double,
     val position: Int,
 )
+
+/** Blocs d'exercices consécutifs : un exercice seul, ou plusieurs liés en supersérie. */
+fun <T> List<T>.supersetBlocks(group: (T) -> Long?): List<List<T>> {
+    val blocks = mutableListOf<MutableList<T>>()
+    forEach { item ->
+        val g = group(item)
+        val last = blocks.lastOrNull()
+        if (g != null && last != null && group(last.last()) == g) last += item else blocks += mutableListOf(item)
+    }
+    return blocks
+}

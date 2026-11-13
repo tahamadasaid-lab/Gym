@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-data class ProgramItem(val exerciseId: Long, val targetSets: Int)
+data class ProgramItem(val exerciseId: Long, val targetSets: Int, val supersetGroup: Long? = null)
 
 class ProgramEditorViewModel(
     savedStateHandle: SavedStateHandle,
@@ -37,7 +37,7 @@ class ProgramEditorViewModel(
                 repo.getProgram(programId)?.let { p ->
                     name = p.program.name
                     items.clear()
-                    items.addAll(p.orderedItems.map { ProgramItem(it.exercise.id, it.item.targetSets) })
+                    items.addAll(p.orderedItems.map { ProgramItem(it.exercise.id, it.item.targetSets, it.item.supersetGroup) })
                 }
                 loaded = true
             }
@@ -63,12 +63,49 @@ class ProgramEditorViewModel(
         items.add(target, item)
     }
 
+    /** Vrai si l'exercice [index] est enchaîné en supersérie avec le suivant. */
+    fun isLinked(index: Int): Boolean {
+        val a = items.getOrNull(index)?.supersetGroup ?: return false
+        return items.getOrNull(index + 1)?.supersetGroup == a
+    }
+
+    private fun newGroupId(): Long = (items.mapNotNull { it.supersetGroup }.maxOrNull() ?: 0L) + 1
+
+    /** Lie / délie l'exercice [index] et le suivant en supersérie. */
+    fun toggleLink(index: Int) {
+        if (index + 1 !in items.indices) return
+        if (isLinked(index)) {
+            val g = items[index].supersetGroup
+            // Partie après la coupure
+            val tail = mutableListOf<Int>()
+            var j = index + 1
+            while (j < items.size && items[j].supersetGroup == g) { tail += j; j++ }
+            val tailGroup = if (tail.size > 1) newGroupId() else null
+            tail.forEach { items[it] = items[it].copy(supersetGroup = tailGroup) }
+            // Partie avant la coupure : seule, elle n'est plus une supersérie
+            if (index == 0 || items[index - 1].supersetGroup != g) items[index] = items[index].copy(supersetGroup = null)
+        } else {
+            val g = items[index].supersetGroup ?: newGroupId()
+            items[index] = items[index].copy(supersetGroup = g)
+            val old = items[index + 1].supersetGroup
+            var j = index + 1
+            while (j < items.size && (j == index + 1 || (old != null && items[j].supersetGroup == old))) {
+                items[j] = items[j].copy(supersetGroup = g)
+                j++
+            }
+        }
+    }
+
     fun remove(index: Int) {
         items.removeAt(index)
     }
 
     fun save(onDone: () -> Unit) = viewModelScope.launch {
-        repo.saveProgram(programId, name, items.map { it.exerciseId to it.targetSets })
+        repo.saveProgramEntries(
+            programId,
+            name,
+            items.map { WorkoutRepository.ProgramEntry(it.exerciseId, it.targetSets, it.supersetGroup) },
+        )
         onDone()
     }
 

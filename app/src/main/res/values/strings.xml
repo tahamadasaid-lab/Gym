@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">GymTracker</string>
+    <string name="widget_description">Minuteur de repos, séance en cours et résumé de la semaine</string>
 </resources>

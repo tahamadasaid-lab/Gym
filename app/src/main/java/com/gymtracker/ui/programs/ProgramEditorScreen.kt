@@ -45,6 +45,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
 import com.gymtracker.ui.AppViewModelProvider
 import com.gymtracker.ui.components.ConfirmDialog
 import com.gymtracker.ui.components.ExerciseAvatar
@@ -102,7 +105,11 @@ fun ProgramEditorScreen(
             items(vm.items.size) { index ->
                 val item = vm.items[index]
                 val ex = byId[item.exerciseId]
-                Card(Modifier.fillMaxWidth()) {
+                val inSuperset = vm.isLinked(index) || (index > 0 && vm.isLinked(index - 1))
+                Card(
+                    Modifier.fillMaxWidth(),
+                    border = if (inSuperset) BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f)) else null,
+                ) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column {
                             IconButton(onClick = { vm.move(index, -1) }, enabled = index > 0, modifier = Modifier.size(32.dp)) {
@@ -126,6 +133,24 @@ fun ProgramEditorScreen(
                             Icon(Icons.Filled.Add, "Plus de séries", Modifier.size(18.dp))
                         }
                         IconButton(onClick = { vm.remove(index) }) { Icon(Icons.Outlined.Delete, "Retirer") }
+                    }
+                }
+                if (index < vm.items.lastIndex) {
+                    val linked = vm.isLinked(index)
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = { vm.toggleLink(index) }) {
+                            Icon(
+                                if (linked) Icons.Filled.Link else Icons.Filled.LinkOff,
+                                null,
+                                Modifier.size(18.dp),
+                                tint = if (linked) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (linked) "Supersérie (enchaînés sans repos)" else "Lier en supersérie",
+                                color = if (linked) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

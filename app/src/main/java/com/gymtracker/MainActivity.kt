@@ -1,6 +1,10 @@
 package com.gymtracker
 
+import android.content.Intent
 import android.graphics.Color
+import androidx.lifecycle.lifecycleScope
+import com.gymtracker.widget.GymWidgetProvider
+import kotlinx.coroutines.launch
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -19,6 +23,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val settingsStore = (application as GymApp).settings
+        handleIntent(intent)
         setContent {
             val settings by settingsStore.settings.collectAsStateWithLifecycle()
             val dark = when (settings.themeMode) {
@@ -35,6 +40,20 @@ class MainActivity : ComponentActivity() {
             GymTrackerTheme(darkTheme = dark, pureBlack = settings.pureBlack) {
                 GymTrackerApp()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    /** Bouton « Démarrer une séance » du widget. */
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == GymWidgetProvider.ACTION_START_SESSION) {
+            intent.action = null
+            val app = application as GymApp
+            lifecycleScope.launch { app.repository.startSessionIfNone() }
         }
     }
 }

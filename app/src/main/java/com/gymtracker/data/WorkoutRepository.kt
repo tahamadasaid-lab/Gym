@@ -3,6 +3,7 @@ package com.gymtracker.data
 import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
@@ -82,21 +83,31 @@ class WorkoutRepository(private val db: AppDatabase) {
     fun observeSession(id: Long): Flow<SessionWithExercises?> = dao.observeSessionWithExercises(id)
     fun observeFinishedSessions(): Flow<List<SessionWithExercises>> = dao.observeFinishedSessions()
 
+    /** Démarre une séance libre s'il n'y en a pas déjà une en cours (bouton du widget). */
+    suspend fun startSessionIfNone() {
+        if (dao.observeActiveSession().first() == null) startSession()
+    }
+
     suspend fun startSession(): Long = dao.insertSession(WorkoutSession(startedAt = System.currentTimeMillis()))
 
     suspend fun startSessionFromProgram(programId: Long): Long = db.withTransaction {
         val program = programDao.getProgram(programId)
         val sessionId = dao.insertSession(WorkoutSession(startedAt = System.currentTimeMillis()))
+        val groups = mutableMapOf<Long, MutableList<Long>>()
         program?.orderedItems?.forEachIndexed { i, it ->
-            dao.insertSessionExercise(
+            val seId = dao.insertSessionExercise(
                 SessionExercise(
                     sessionId = sessionId,
                     exerciseId = it.exercise.id,
                     position = i,
                     targetSets = it.item.targetSets,
+                    supersetGroup = null,
                 )
             )
+            it.item.supersetGroup?.let { g -> groups.getOrPut(g) { mutableListOf() } += seId }
         }
+        // Les superséries du programme reçoivent un identifiant propre à la séance.
+        groups.values.filter { it.size > 1 }.forEach { ids -> dao.setSupersetGroup(ids, ids.first()) }
         sessionId
     }
 
@@ -111,7 +122,10 @@ class WorkoutRepository(private val db: AppDatabase) {
     suspend fun removeSessionExercise(sessionExerciseId: Long) = dao.deleteSessionExercise(sessionExerciseId)
 
     // ---------------------------------------------------------------- Séries
-    suspend fun logSet(sessionId: Long, sessionExerciseId: Long, reps: Int, weightKg: Double) {
+    /** Lie (group non nul) ou délie (null) des exercices de la séance en supersérie. */
+    suspend fun setSuperset(sessionExerciseIds: List<Long>, group: Long?) = dao.setSupersetGroup(sessionExerciseIds, group)
+
+    suspend fun logSet(sessionId: Long, sessionExerciseId: Long, reps: Int, weightKg: Double, isDropSet: Boolean = false) {
         val now = System.currentTimeMillis()
         val rest = dao.lastSetInSession(sessionId)
             ?.let { ((now - it.completedAt) / 1000).toInt() }
@@ -123,6 +137,7 @@ class WorkoutRepository(private val db: AppDatabase) {
                 weightKg = weightKg,
                 completedAt = now,
                 restSeconds = rest,
+                isDropSet = isDropSet,
             )
         )
     }
@@ -155,8 +170,13 @@ class WorkoutRepository(private val db: AppDatabase) {
     suspend fun getProgram(id: Long): ProgramWithExercises? = programDao.getProgram(id)
     suspend fun deleteProgram(id: Long) = programDao.deleteProgram(id)
 
+    data class ProgramEntry(val exerciseId: Long, val targetSets: Int, val supersetGroup: Long? = null)
+
     /** items = (exerciseId, séries visées), dans l'ordre. Retourne l'id du programme. */
-    suspend fun saveProgram(id: Long?, name: String, items: List<Pair<Long, Int>>): Long = db.withTransaction {
+    suspend fun saveProgram(id: Long?, name: String, items: List<Pair<Long, Int>>): Long =
+        saveProgramEntries(id, name, items.map { ProgramEntry(it.first, it.second) })
+
+    suspend fun saveProgramEntries(id: Long?, name: String, items: List<ProgramEntry>): Long = db.withTransaction {
         val programId = if (id == null) {
             programDao.insertProgram(Program(name = name.trim()))
         } else {
@@ -165,19 +185,25 @@ class WorkoutRepository(private val db: AppDatabase) {
             id
         }
         programDao.insertProgramExercises(
-            items.mapIndexed { i, (exerciseId, sets) ->
-                ProgramExercise(programId = programId, exerciseId = exerciseId, position = i, targetSets = sets)
+            items.mapIndexed { i, e ->
+                ProgramExercise(
+                    programId = programId,
+                    exerciseId = e.exerciseId,
+                    position = i,
+                    targetSets = e.targetSets,
+                    supersetGroup = e.supersetGroup,
+                )
             }
         )
         programId
     }
 
     suspend fun saveSessionAsProgram(session: SessionWithExercises, name: String): Long =
-        saveProgram(
+        saveProgramEntries(
             id = null,
             name = name,
             items = session.orderedExercises.map {
-                it.exercise.id to (it.targetSets())
+                ProgramEntry(it.exercise.id, it.targetSets(), it.sessionExercise.supersetGroup)
             },
         )
 
@@ -220,7 +246,7 @@ class WorkoutRepository(private val db: AppDatabase) {
                 s.exercises.forEachIndexed { pos, ex ->
                     val exerciseId = findOrCreateExercise(ex.name, ex.muscleGroup)
                     val seId = dao.insertSessionExercise(
-                        SessionExercise(sessionId = sessionId, exerciseId = exerciseId, position = pos)
+                        SessionExercise(sessionId = sessionId, exerciseId = exerciseId, position = pos, supersetGroup = ex.supersetGroup)
                     )
                     dao.insertSets(
                         ex.sets.map {
@@ -230,6 +256,7 @@ class WorkoutRepository(private val db: AppDatabase) {
                                 weightKg = it.weightKg,
                                 completedAt = it.completedAt,
                                 restSeconds = it.restSeconds,
+                                isDropSet = it.isDropSet,
                             )
                         }
                     )

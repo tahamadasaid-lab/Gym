@@ -14,6 +14,18 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 - Objectif de séries (ex. 3/4) avec barre de progression quand la séance vient d'un programme.
 - **Touche une série pour la modifier ou la supprimer.**
 - « Enregistrer comme programme » depuis le menu ⋮ pour réutiliser la séance.
+- **Superséries** : menu ⋮ d'un exercice › « Supersérie avec l'exercice suivant ». Les exercices liés
+  s'enchaînent sans repos ; le minuteur démarre après le dernier du bloc. Aussi dans les programmes.
+- **Séries dégressives** : bouton « Dégressive » → la série est enregistrée sans repos (badge **D**)
+  et le poids suivant est proposé à −20 %.
+- **Calculateur de disques** : bouton « Disques » → quels disques mettre de chaque côté de la barre,
+  avec un dessin de la barre chargée. Barre (20/15/10/7 kg ou sans) et disques disponibles réglables.
+
+### Widget d'écran d'accueil
+- Pendant le repos : **compte à rebours en direct** avec boutons « +15 s » et « Passer ».
+- Pendant la séance : chrono de la séance, séries, volume et calories.
+- Sinon : résumé de la semaine et bouton « Démarrer une séance ».
+- Ajout : appui long sur l'écran d'accueil › Widgets › GymTracker.
 
 ### Minuteur de repos
 - Lancé automatiquement à chaque série validée (durée réglable par exercice).
@@ -132,21 +144,16 @@ app/src/main/java/com/gymtracker/
     └── theme/
 ```
 
-### Modèle de données (v3)
+### Modèle de données (v4)
 | Table | Contenu |
 |---|---|
 | `exercises` | nom, groupe musculaire, repos par défaut, photo |
 | `sessions` | début, fin |
-| `session_exercises` | exercice réalisé dans une séance (ordre, séries visées) |
-| `sets` | poids, répétitions, heure, repos réel avant la série |
+| `session_exercises` | exercice réalisé dans une séance (ordre, séries visées, supersérie) |
+| `sets` | poids, répétitions, heure, repos réel avant la série, dégressive |
 | `programs` / `program_exercises` | programmes et leurs exercices |
 | `body_weights` | pesées |
 | `muscle_groups` | catégories : nom, couleur, pictogramme, intensité (MET) |
 
-Les mises à jour (v1 → v2 → v3) conservent toutes les données (migrations testées dans `MigrationTest`).
+Les mises à jour (v1 → v2 → v3 → v4) conservent toutes les données (migrations testées dans `MigrationTest`).
 Tests : `./gradlew testDebugUnitTest`.
-
-## Idées pour la suite
-- Superséries et séries dégressives.
-- Calcul automatique des disques à charger sur la barre.
-- Widget d'écran d'accueil.

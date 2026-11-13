@@ -35,7 +35,7 @@ class MigrationTest {
     )
 
     @Test
-    fun migrate1To3_keepsData() = runBlocking {
+    fun migrate1To4_keepsData() = runBlocking {
         val name = "migration-test.db"
         context.deleteDatabase(name)
         val file = context.getDatabasePath(name).apply { parentFile?.mkdirs() }
@@ -51,7 +51,7 @@ class MigrationTest {
         }
 
         val room = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .allowMainThreadQueries()
             .build()
         try {
@@ -62,6 +62,9 @@ class MigrationTest {
             assertNull(ex.exercise.imageUri)
             assertNull(ex.sessionExercise.targetSets)
             assertEquals(listOf(100.0, 105.0), ex.orderedSets.map { it.weightKg })
+            // v4 : anciennes séries = séries normales, pas de supersérie
+            assertTrue(ex.orderedSets.none { it.isDropSet })
+            assertNull(ex.sessionExercise.supersetGroup)
 
             // v3 : catégories par défaut + groupes déjà utilisés par les exercices.
             val categories = room.categoryDao().observeAll().first().map { it.name }

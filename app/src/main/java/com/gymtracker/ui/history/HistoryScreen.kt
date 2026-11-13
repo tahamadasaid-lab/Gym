@@ -307,7 +307,7 @@ fun SessionDetailScreen(
                             ) {
                                 Text("${i + 1}", Modifier.width(28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
-                                    "${formatWeight(set.weightKg)} kg × ${set.reps}",
+                                    (if (set.isDropSet) "↘ " else "") + "${formatWeight(set.weightKg)} kg × ${set.reps}",
                                     Modifier.weight(1f),
                                     fontWeight = FontWeight.SemiBold,
                                 )

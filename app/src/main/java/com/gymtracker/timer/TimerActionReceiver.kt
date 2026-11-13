@@ -17,6 +17,13 @@ class TimerActionReceiver : BroadcastReceiver() {
     }
 
     companion object {
+        fun pendingIntent(context: Context, action: String, requestCode: Int): android.app.PendingIntent =
+            android.app.PendingIntent.getBroadcast(
+                context, requestCode,
+                Intent(context, TimerActionReceiver::class.java).setAction(action),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+
         const val ACTION_MINUS = "com.gymtracker.timer.MINUS"
         const val ACTION_PLUS = "com.gymtracker.timer.PLUS"
         const val ACTION_SKIP = "com.gymtracker.timer.SKIP"

@@ -45,6 +45,8 @@ import com.gymtracker.settings.ThemeMode
 import com.gymtracker.ui.AppViewModelProvider
 import com.gymtracker.ui.components.LocalCalories
 import com.gymtracker.ui.components.NumberStepper
+import com.gymtracker.ui.components.PlateCalculatorDialog
+import androidx.compose.material.icons.filled.Calculate
 import com.gymtracker.ui.components.ScreenScaffold
 import com.gymtracker.ui.components.SectionHeader
 import com.gymtracker.util.formatWeight
@@ -58,6 +60,8 @@ fun SettingsScreen(
     val s by vm.settings.collectAsStateWithLifecycle()
     val calories = LocalCalories.current
     var weightText by remember { mutableStateOf(formatWeight(s.profileWeightKg)) }
+    var showPlates by remember { mutableStateOf(false) }
+    if (showPlates) PlateCalculatorDialog(initialWeight = "", onDismiss = { showPlates = false })
 
     ScreenScaffold(
         title = "Réglages",
@@ -159,6 +163,15 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            item { SectionHeader("Disques") }
+            item {
+                FilledTonalButton(onClick = { showPlates = true }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Calculate, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Calculateur de disques · barre ${formatWeight(s.barWeightKg)} kg")
+                }
             }
 
             item { SectionHeader("Calories") }

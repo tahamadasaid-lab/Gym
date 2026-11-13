@@ -77,6 +77,9 @@ interface WorkoutDao {
     @Insert
     suspend fun insertSessionExercise(sessionExercise: SessionExercise): Long
 
+    @Query("UPDATE session_exercises SET supersetGroup = :group WHERE id IN (:ids)")
+    suspend fun setSupersetGroup(ids: List<Long>, group: Long?)
+
     @Query("DELETE FROM session_exercises WHERE id = :id")
     suspend fun deleteSessionExercise(id: Long)
 

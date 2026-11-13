@@ -36,3 +36,13 @@ fun formatDurationHuman(totalSeconds: Long): String {
 }
 
 fun parseWeight(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()
+
+/** Lundi 0 h de la semaine en cours. */
+fun startOfWeekMillis(): Long = java.util.Calendar.getInstance().apply {
+    firstDayOfWeek = java.util.Calendar.MONDAY
+    set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.MONDAY)
+    set(java.util.Calendar.HOUR_OF_DAY, 0)
+    set(java.util.Calendar.MINUTE, 0)
+    set(java.util.Calendar.SECOND, 0)
+    set(java.util.Calendar.MILLISECOND, 0)
+}.timeInMillis

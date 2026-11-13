@@ -18,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         BodyWeight::class,
         MuscleGroup::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,7 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "gymtracker.db")
                 .addCallback(SeedCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }
@@ -69,6 +69,15 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         )
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_muscle_groups_name` ON `muscle_groups` (`name`)")
         DefaultCategories.seed(db)
+    }
+}
+
+/** v4 : séries dégressives et superséries. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `sets` ADD COLUMN `isDropSet` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `session_exercises` ADD COLUMN `supersetGroup` INTEGER")
+        db.execSQL("ALTER TABLE `program_exercises` ADD COLUMN `supersetGroup` INTEGER")
     }
 }
 

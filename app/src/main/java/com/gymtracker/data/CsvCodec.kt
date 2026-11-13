@@ -10,12 +10,23 @@ import java.util.Locale
  */
 object CsvCodec {
     private const val SEP = ';'
-    const val header = "type;debut_seance;fin_seance;exercice;groupe;serie;poids_kg;reps;repos_s;heure_serie"
+    const val header = "type;debut_seance;fin_seance;exercice;groupe;serie;poids_kg;reps;repos_s;heure_serie;degressive;superserie"
 
     private fun dateFormat() = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
 
-    data class ParsedSet(val weightKg: Double, val reps: Int, val restSeconds: Int?, val completedAt: Long)
-    data class ParsedExercise(val name: String, val muscleGroup: String, val sets: MutableList<ParsedSet> = mutableListOf())
+    data class ParsedSet(
+        val weightKg: Double,
+        val reps: Int,
+        val restSeconds: Int?,
+        val completedAt: Long,
+        val isDropSet: Boolean = false,
+    )
+    data class ParsedExercise(
+        val name: String,
+        val muscleGroup: String,
+        val sets: MutableList<ParsedSet> = mutableListOf(),
+        val supersetGroup: Long? = null,
+    )
     data class ParsedSession(val startedAt: Long, val endedAt: Long?, val exercises: MutableList<ParsedExercise> = mutableListOf())
     data class Parsed(val sessions: List<ParsedSession>, val bodyWeights: List<BodyWeight>)
 
@@ -29,11 +40,12 @@ object CsvCodec {
                     rows += row(
                         "SERIE", d(s.session.startedAt), d(s.session.endedAt), ex.exercise.name, ex.exercise.muscleGroup,
                         "${i + 1}", num(set.weightKg), "${set.reps}", set.restSeconds?.toString() ?: "", d(set.completedAt),
+                        if (set.isDropSet) "1" else "0", ex.sessionExercise.supersetGroup?.toString() ?: "",
                     )
                 }
             }
         }
-        weights.forEach { rows += row("POIDS_CORPS", d(it.date), "", "", "", "", num(it.weightKg), "", "", "") }
+        weights.forEach { rows += row("POIDS_CORPS", d(it.date), "", "", "", "", num(it.weightKg), "", "", "", "", "") }
         return rows
     }
 
@@ -54,12 +66,17 @@ object CsvCodec {
                     val weight = f.getOrElse(6) { "" }.trim().replace(',', '.').toDoubleOrNull() ?: 0.0
                     val session = sessions.getOrPut(start) { ParsedSession(start, date(f.getOrElse(2) { "" })) }
                     val ex = session.exercises.firstOrNull { it.name.equals(name, ignoreCase = true) }
-                        ?: ParsedExercise(name, f.getOrElse(4) { "" }.trim()).also { session.exercises += it }
+                        ?: ParsedExercise(
+                            name = name,
+                            muscleGroup = f.getOrElse(4) { "" }.trim(),
+                            supersetGroup = f.getOrElse(11) { "" }.trim().toLongOrNull(),
+                        ).also { session.exercises += it }
                     ex.sets += ParsedSet(
                         weightKg = weight,
                         reps = reps,
                         restSeconds = f.getOrElse(8) { "" }.trim().toIntOrNull(),
                         completedAt = date(f.getOrElse(9) { "" }) ?: (start + ex.sets.size * 1000L),
+                        isDropSet = f.getOrElse(10) { "" }.trim() == "1",
                     )
                 }
                 "POIDS_CORPS" -> {

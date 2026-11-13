@@ -28,6 +28,7 @@ class CsvRoundTripTest {
         val seId = repo.addExerciseToSession(sessionId, benchId)
         repo.logSet(sessionId, seId, 10, 60.0)
         repo.logSet(sessionId, seId, 8, 62.5)
+        repo.logSet(sessionId, seId, 6, 50.0, isDropSet = true)
         repo.finishSession(sessionId)
         repo.addBodyWeight(78.4, 1_700_000_000_000)
 
@@ -45,7 +46,8 @@ class CsvRoundTripTest {
         val ex = sessions.single().exercises.single()
         assertEquals("Développé; couché \"barre\"", ex.exercise.name)
         assertEquals("Pectoraux", ex.exercise.muscleGroup)
-        assertEquals(listOf(60.0 to 10, 62.5 to 8), ex.orderedSets.map { it.weightKg to it.reps })
+        assertEquals(listOf(60.0 to 10, 62.5 to 8, 50.0 to 6), ex.orderedSets.map { it.weightKg to it.reps })
+        assertEquals(listOf(false, false, true), ex.orderedSets.map { it.isDropSet })
         assertEquals(78.4, target.bodyWeightDao().getAll().single().weightKg, 0.0)
 
         // Ré-importer le même fichier ne crée pas de doublons.

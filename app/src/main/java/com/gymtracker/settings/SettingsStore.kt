@@ -1,6 +1,7 @@
 package com.gymtracker.settings
 
 import android.content.Context
+import com.gymtracker.data.StandardPlates
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,10 @@ data class AppSettings(
     val useAlarmChannel: Boolean = false,
     /** Poids utilisé pour les calories quand aucune pesée n'est enregistrée. */
     val profileWeightKg: Double = 75.0,
+    /** Poids de la barre pour le calcul des disques. */
+    val barWeightKg: Double = 20.0,
+    /** Disques disponibles dans ta salle (kg). */
+    val availablePlates: List<Double> = StandardPlates,
 )
 
 /** Réglages stockés dans les SharedPreferences, exposés en StateFlow. */
@@ -40,6 +45,10 @@ class SettingsStore(context: Context) {
         vibrationEnabled = prefs.getBoolean("vibration", true),
         useAlarmChannel = prefs.getBoolean("alarm_channel", false),
         profileWeightKg = prefs.getFloat("profile_weight", 75f).toDouble(),
+        barWeightKg = prefs.getFloat("bar_weight", 20f).toDouble(),
+        availablePlates = prefs.getString("plates", null)
+            ?.split(';')?.mapNotNull { it.toDoubleOrNull() }
+            ?: StandardPlates,
     )
 
     fun update(transform: (AppSettings) -> AppSettings) {
@@ -53,6 +62,8 @@ class SettingsStore(context: Context) {
             .putBoolean("vibration", s.vibrationEnabled)
             .putBoolean("alarm_channel", s.useAlarmChannel)
             .putFloat("profile_weight", s.profileWeightKg.toFloat())
+            .putFloat("bar_weight", s.barWeightKg.toFloat())
+            .putString("plates", s.availablePlates.joinToString(";"))
             .apply()
         _settings.value = s
     }

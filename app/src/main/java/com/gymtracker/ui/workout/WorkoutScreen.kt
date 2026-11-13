@@ -77,6 +77,15 @@ import com.gymtracker.data.WorkoutSet
 import com.gymtracker.data.effort
 import com.gymtracker.data.efforts
 import com.gymtracker.data.volume
+import com.gymtracker.data.supersetBlocks
+import com.gymtracker.ui.components.PlateCalculatorDialog
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import com.gymtracker.ui.components.LocalCalories
 import com.gymtracker.ui.components.formatKcal
 import androidx.compose.material.icons.filled.Settings
@@ -374,14 +383,24 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
                     )
                 }
             }
-            items(session.orderedExercises, key = { it.sessionExercise.id }) { item ->
+            val ordered = session.orderedExercises
+            val supersets = supersetInfos(ordered)
+            items(ordered, key = { it.sessionExercise.id }) { item ->
                 val prev = previous[item.sessionExercise.id].orEmpty()
+                val idx = ordered.indexOf(item)
+                val next = ordered.getOrNull(idx + 1)
+                val info = supersets[item.sessionExercise.id]
                 ExerciseCard(
                     item = item,
                     previousSets = prev,
                     input = vm.inputFor(item, prev),
                     onInputChange = { vm.updateInput(item.sessionExercise.id, it) },
-                    onLogSet = { vm.logSet(session.session.id, item, it) },
+                    onLogSet = { input, drop -> vm.logSet(session, item, input, drop) },
+                    superset = info,
+                    canLinkNext = next != null &&
+                        (item.sessionExercise.supersetGroup == null || next.sessionExercise.supersetGroup != item.sessionExercise.supersetGroup),
+                    onLinkNext = { vm.linkWithNext(session, item) },
+                    onUnlink = { vm.unlinkSuperset(item) },
                     onEditSet = { set, index -> editSet = set to index },
                     onEditRest = { restEdit = item },
                     onShowImage = { viewImage = item.exercise },
@@ -473,25 +492,72 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
     }
 }
 
+/** Position d'un exercice dans une supersérie (A1, A2…). */
+data class SupersetInfo(val letter: Char, val index: Int, val size: Int, val nextName: String?) {
+    val isLast: Boolean get() = index == size - 1
+}
+
+fun supersetInfos(ordered: List<SessionExerciseWithSets>): Map<Long, SupersetInfo> {
+    val result = mutableMapOf<Long, SupersetInfo>()
+    var letter = 'A'
+    ordered.supersetBlocks { it.sessionExercise.supersetGroup }.filter { it.size > 1 }.forEach { block ->
+        block.forEachIndexed { i, it ->
+            result[it.sessionExercise.id] = SupersetInfo(letter, i, block.size, block.getOrNull(i + 1)?.exercise?.name)
+        }
+        letter++
+    }
+    return result
+}
+
 @Composable
 private fun ExerciseCard(
     item: SessionExerciseWithSets,
     previousSets: List<WorkoutSet>,
     input: SetInput,
     onInputChange: (SetInput) -> Unit,
-    onLogSet: (SetInput) -> Boolean,
+    onLogSet: (SetInput, Boolean) -> Boolean,
+    superset: SupersetInfo?,
+    canLinkNext: Boolean,
+    onLinkNext: () -> Unit,
+    onUnlink: () -> Unit,
     onEditSet: (WorkoutSet, Int) -> Unit,
     onEditRest: () -> Unit,
     onShowImage: () -> Unit,
     onRemove: () -> Unit,
 ) {
     var error by remember { mutableStateOf(false) }
+    var dropMode by remember { mutableStateOf(false) }
+    var showPlates by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     val sets = item.orderedSets
     val target = item.sessionExercise.targetSets
     val targetReached = target != null && sets.size >= target
+    val accent = MaterialTheme.colorScheme.tertiary
 
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        border = if (superset != null) BorderStroke(2.dp, accent.copy(alpha = 0.7f)) else null,
+    ) {
         Column(Modifier.padding(16.dp)) {
+            if (superset != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                    Icon(Icons.Filled.Link, null, Modifier.size(18.dp), tint = accent)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "SUPERSÉRIE ${superset.letter}${superset.index + 1}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accent,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (superset.isLast) "puis repos" else "→ ${superset.nextName} sans repos",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ExerciseAvatar(
                     item.exercise,
@@ -527,7 +593,35 @@ private fun ExerciseCard(
                         }
                     }
                 }
-                IconButton(onClick = onRemove) { Icon(Icons.Outlined.Delete, "Retirer l'exercice") }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Options de l'exercice") }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        if (canLinkNext) {
+                            DropdownMenuItem(
+                                text = { Text("Supersérie avec l'exercice suivant") },
+                                leadingIcon = { Icon(Icons.Filled.Link, null) },
+                                onClick = { menuOpen = false; onLinkNext() },
+                            )
+                        }
+                        if (superset != null) {
+                            DropdownMenuItem(
+                                text = { Text("Sortir de la supersérie") },
+                                leadingIcon = { Icon(Icons.Filled.LinkOff, null) },
+                                onClick = { menuOpen = false; onUnlink() },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Calculer les disques") },
+                            leadingIcon = { Icon(Icons.Filled.Calculate, null) },
+                            onClick = { menuOpen = false; showPlates = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Retirer l'exercice") },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                            onClick = { menuOpen = false; onRemove() },
+                        )
+                    }
+                }
             }
             if (target != null) {
                 LinearProgressIndicator(
@@ -565,7 +659,21 @@ private fun ExerciseCard(
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(
+                    selected = dropMode,
+                    onClick = { dropMode = !dropMode },
+                    label = { Text("Dégressive") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.TrendingDown, null, Modifier.size(FilterChipDefaults.IconSize)) },
+                )
+                AssistChip(
+                    onClick = { showPlates = true },
+                    label = { Text("Disques") },
+                    leadingIcon = { Icon(Icons.Filled.Calculate, null, Modifier.size(AssistChipDefaults.IconSize)) },
+                )
+            }
+            Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 NumberStepper(
                     label = "Poids (kg)",
@@ -590,12 +698,14 @@ private fun ExerciseCard(
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(
-                    onClick = { error = !onLogSet(input) },
+                    onClick = { error = !onLogSet(input, dropMode) },
                     modifier = Modifier.weight(1f).height(50.dp),
+                    colors = if (dropMode) ButtonDefaults.buttonColors(containerColor = accent, contentColor = MaterialTheme.colorScheme.onTertiary)
+                    else ButtonDefaults.buttonColors(),
                 ) {
-                    Icon(Icons.Filled.Check, null)
+                    Icon(if (dropMode) Icons.AutoMirrored.Filled.TrendingDown else Icons.Filled.Check, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Valider la série ${sets.size + 1}")
+                    Text(if (dropMode) "Valider la dégressive" else "Valider la série ${sets.size + 1}")
                 }
                 Spacer(Modifier.width(8.dp))
                 AssistChip(
@@ -604,7 +714,28 @@ private fun ExerciseCard(
                     leadingIcon = { Icon(Icons.Filled.Timer, "Temps de repos", Modifier.size(AssistChipDefaults.IconSize)) },
                 )
             }
+            val hint = when {
+                dropMode -> "Dégressive : pas de repos, le poids suivant est proposé à −20 %."
+                superset != null && !superset.isLast -> "Supersérie : pas de repos, enchaîne avec ${superset.nextName}."
+                else -> null
+            }
+            if (hint != null) {
+                Text(
+                    hint,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
+    }
+
+    if (showPlates) {
+        PlateCalculatorDialog(
+            initialWeight = input.weight,
+            onDismiss = { showPlates = false },
+            onUseWeight = { w -> onInputChange(input.copy(weight = formatWeight(w))); showPlates = false },
+        )
     }
 }
 
@@ -616,8 +747,13 @@ private fun HeaderText(text: String, modifier: Modifier) {
 @Composable
 private fun SetRow(index: Int, previous: WorkoutSet?, set: WorkoutSet?, onClick: (() -> Unit)?) {
     val done = set != null
+    val drop = set?.isDropSet == true
     Surface(
-        color = if (done) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f) else Color.Transparent,
+        color = when {
+            drop -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f)
+            done -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
+            else -> Color.Transparent
+        },
         shape = MaterialTheme.shapes.small,
         modifier = Modifier
             .fillMaxWidth()
@@ -633,10 +769,18 @@ private fun SetRow(index: Int, previous: WorkoutSet?, set: WorkoutSet?, onClick:
                     Modifier
                         .size(26.dp)
                         .clip(CircleShape)
-                        .background(if (done) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant),
+                        .background(
+                            when {
+                                drop -> MaterialTheme.colorScheme.tertiary
+                                done -> MaterialTheme.colorScheme.secondary
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (done) {
+                    if (drop) {
+                        Text("D", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onTertiary, fontWeight = FontWeight.Bold)
+                    } else if (done) {
                         Icon(Icons.Filled.Check, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSecondary)
                     } else {
                         Text("${index + 1}", style = MaterialTheme.typography.labelMedium)
@@ -650,7 +794,7 @@ private fun SetRow(index: Int, previous: WorkoutSet?, set: WorkoutSet?, onClick:
                 modifier = Modifier.weight(1f),
             )
             Text(
-                set?.let { "${formatWeight(it.weightKg)} kg × ${it.reps}" } ?: "",
+                set?.let { (if (it.isDropSet) "↘ " else "") + "${formatWeight(it.weightKg)} kg × ${it.reps}" } ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1.2f),
