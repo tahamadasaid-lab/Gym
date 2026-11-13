@@ -70,6 +70,40 @@ En ligne de commande (avec le SDK Android installé) :
 ./gradlew installDebug       # installe directement sur le téléphone branché
 ```
 
+## Version iPhone 🍏
+
+Le dossier [`web/`](web/) contient une version **iPhone** de GymTracker : une application web installable
+(PWA) qui reprend les fonctionnalités de la version Android. Pas besoin de Mac, d'Xcode ni de compte
+développeur Apple.
+
+### Mettre l'application en ligne (une seule fois)
+1. Sur GitHub : **Settings › Pages › Build and deployment › Source : « GitHub Actions »**.
+2. Si besoin, **Settings › Environments › github-pages** : autorise la branche utilisée pour le déploiement
+   (par défaut, seule la branche principale peut publier).
+3. Le workflow « Publier la version iPhone » se lance à chaque modification de `web/`
+   (ou manuellement depuis l'onglet **Actions**). L'adresse s'affiche dans le run, du type
+   `https://<utilisateur>.github.io/<dépôt>/`.
+
+### Installer sur l'iPhone
+1. Ouvre cette adresse dans **Safari**.
+2. Touche **Partager** (carré avec une flèche) › **« Sur l'écran d'accueil »** › **Ajouter**.
+3. Lance GymTracker depuis l'icône : plein écran, fonctionne **hors ligne**, données stockées sur le téléphone.
+
+### Récupérer les données de la version Android
+Android : Historique › ⋮ › Exporter en CSV → envoie le fichier sur l'iPhone (AirDrop impossible, mais
+mail, Drive, iCloud…) → iPhone : Réglages ⚙ › **Importer un CSV**. Le format est identique dans les deux sens.
+
+### Différences avec la version Android
+- **Le minuteur ne sonne pas quand l'écran est verrouillé ou l'app en arrière-plan** : iOS met en pause
+  les applications web. Le minuteur reste juste (il repart du bon temps à la réouverture), et l'option
+  « Garder l'écran allumé pendant la séance » (activée par défaut) évite le problème.
+- Pas de vibration (non disponible pour les apps web sur iPhone). Les bips et l'annonce vocale passent dans
+  les écouteurs et baissent la musique un instant.
+- En plus : **sauvegarde complète** (JSON avec programmes, catégories, photos), à garder dans Fichiers / iCloud :
+  supprimer l'icône de l'écran d'accueil efface les données.
+
+Tester en local : `cd web && python3 -m http.server 8000`, puis http://localhost:8000.
+
 ## Architecture technique
 
 - **Kotlin** + **Jetpack Compose** (Material 3), minSdk 26 (Android 8.0).
