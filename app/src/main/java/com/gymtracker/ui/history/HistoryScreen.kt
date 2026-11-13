@@ -71,6 +71,7 @@ import com.gymtracker.ui.components.EmptyState
 import com.gymtracker.ui.components.ExerciseAvatar
 import com.gymtracker.ui.components.ScreenScaffold
 import com.gymtracker.ui.components.StatTile
+import com.gymtracker.ui.workout.SessionNotesField
 import com.gymtracker.util.formatDuration
 import com.gymtracker.util.formatDurationHuman
 import com.gymtracker.util.formatLongDate
@@ -271,6 +272,9 @@ fun SessionDetailScreen(
                     }
                 }
             }
+            item(key = "notes") {
+                SessionNotesField(sessionId = s.session.id, saved = s.session.notes, onSave = vm::updateNotes)
+            }
             summary.averageRestSeconds?.let { avg ->
                 item {
                     Text(
@@ -307,7 +311,8 @@ fun SessionDetailScreen(
                             ) {
                                 Text("${i + 1}", Modifier.width(28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
-                                    (if (set.isDropSet) "↘ " else "") + "${formatWeight(set.weightKg)} kg × ${set.reps}",
+                                    (if (set.isWarmup) "É " else "") + (if (set.isDropSet) "↘ " else "") +
+                                        "${formatWeight(set.weightKg)} kg × ${set.reps}" + (set.rpe?.let { "  @$it" } ?: ""),
                                     Modifier.weight(1f),
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -347,8 +352,9 @@ fun SessionDetailScreen(
             initialWeight = formatWeight(e.set.weightKg),
             initialReps = e.set.reps.toString(),
             onDismiss = { edit = null },
-            onSave = { w, r -> vm.updateSet(e.set, w, r); edit = null },
+            onSave = { w, r, rpe -> vm.updateSet(e.set, w, r, rpe); edit = null },
             onDelete = { vm.deleteSet(e.set); edit = null },
+            initialRpe = e.set.rpe,
         )
         is SetEdit.New -> {
             val last = e.item.orderedSets.lastOrNull()
@@ -357,7 +363,7 @@ fun SessionDetailScreen(
                 initialWeight = last?.let { formatWeight(it.weightKg) } ?: "",
                 initialReps = last?.reps?.toString() ?: "",
                 onDismiss = { edit = null },
-                onSave = { w, r -> vm.addSet(e.item.sessionExercise.id, w, r); edit = null },
+                onSave = { w, r, _ -> vm.addSet(e.item.sessionExercise.id, w, r); edit = null },
             )
         }
         null -> Unit

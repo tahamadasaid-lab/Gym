@@ -17,6 +17,8 @@ data class Exercise(
     val defaultRestSeconds: Int = 90,
     /** Chemin local d'une photo choisie par l'utilisateur (null = visuel par défaut). */
     val imageUri: String? = null,
+    /** Note fixe affichée à chaque séance (ex. « réglage siège : 4 »). */
+    val notes: String = "",
 )
 
 @Entity(tableName = "sessions")
@@ -24,6 +26,7 @@ data class WorkoutSession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val startedAt: Long,
     val endedAt: Long? = null,
+    val notes: String = "",
 )
 
 /** Un exercice réalisé pendant une séance. */
@@ -80,7 +83,15 @@ data class WorkoutSet(
     /** Série dégressive : charge réduite enchaînée sans repos après la série précédente. */
     @ColumnInfo(defaultValue = "0")
     val isDropSet: Boolean = false,
-)
+    /** Série d'échauffement : exclue du volume, des records et de la progression. */
+    @ColumnInfo(defaultValue = "0")
+    val isWarmup: Boolean = false,
+    /** Effort ressenti (RPE 6 à 10, 10 = échec). */
+    val rpe: Int? = null,
+) {
+    /** Série « de travail » (ni échauffement) : compte dans les records et la progression. */
+    val isWork: Boolean get() = !isWarmup
+}
 
 data class SessionExerciseWithSets(
     @Embedded val sessionExercise: SessionExercise,
@@ -189,3 +200,59 @@ fun <T> List<T>.supersetBlocks(group: (T) -> Long?): List<List<T>> {
     }
     return blocks
 }
+
+/** Objectif : poids sur un exercice, ou poids de corps à atteindre. */
+@Entity(
+    tableName = "goals",
+    foreignKeys = [
+        ForeignKey(
+            entity = Exercise::class,
+            parentColumns = ["id"],
+            childColumns = ["exerciseId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("exerciseId")],
+)
+data class Goal(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** [GoalType] */
+    val type: String,
+    val exerciseId: Long?,
+    val targetValue: Double,
+    val startValue: Double,
+    val createdAt: Long,
+    val deadline: Long?,
+    val achievedAt: Long? = null,
+)
+
+enum class GoalType { EXERCISE_WEIGHT, BODY_WEIGHT }
+
+/** Mensuration (tour de bras, taille…), en cm. */
+@Entity(tableName = "measurements", indices = [Index("type")])
+data class Measurement(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val date: Long,
+    val type: String,
+    val valueCm: Double,
+)
+
+/** Photo de progression datée. */
+@Entity(tableName = "progress_photos")
+data class ProgressPhoto(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val date: Long,
+    val path: String,
+    val note: String = "",
+)
+
+/** Série de travail avec son exercice et sa date (records, bilans, objectifs). */
+data class WorkSetRow(
+    val exerciseId: Long,
+    val sessionId: Long,
+    val date: Long,
+    val reps: Int,
+    val weightKg: Double,
+)
+
+data class WeightReps(val weightKg: Double, val reps: Int)

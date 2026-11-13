@@ -1,6 +1,7 @@
 package com.gymtracker
 
 import android.app.Application
+import com.gymtracker.backup.BackupManager
 import com.gymtracker.data.AppDatabase
 import com.gymtracker.data.CalorieCalculator
 import com.gymtracker.data.ImageStore
@@ -29,7 +30,9 @@ import kotlinx.coroutines.launch
 class GymApp : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    val repository by lazy { WorkoutRepository(AppDatabase.build(this)) }
+    val database by lazy { AppDatabase.build(this) }
+    val repository by lazy { WorkoutRepository(database) }
+    val backup by lazy { BackupManager(this, database, settings) }
     val settings by lazy { SettingsStore(this) }
     val restTimer by lazy { RestTimer(this, appScope, settings) }
     val imageStore by lazy { ImageStore(this) }

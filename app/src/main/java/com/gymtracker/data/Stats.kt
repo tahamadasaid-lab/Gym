@@ -7,7 +7,8 @@ fun estimatedOneRepMax(weightKg: Double, reps: Int): Double = when {
     else -> weightKg * (1 + reps / 30.0)
 }
 
-val WorkoutSet.volume: Double get() = weightKg * reps
+/** Volume d'une série (les échauffements ne comptent pas). */
+val WorkoutSet.volume: Double get() = if (isWarmup) 0.0 else weightKg * reps
 
 /** Temps actif estimé passé sur un exercice (exécution + repos), utilisé pour les calories. */
 data class Effort(val muscleGroup: String, val activeSeconds: Long)
@@ -65,7 +66,7 @@ fun SessionWithExercises.summary(): SessionSummary {
         startedAt = session.startedAt,
         endedAt = session.endedAt,
         exerciseNames = orderedExercises.filter { it.sets.isNotEmpty() }.map { it.exercise.name },
-        setCount = allSets.size,
+        setCount = allSets.count { it.isWork },
         volume = allSets.sumOf { it.volume },
         averageRestSeconds = if (rests.isEmpty()) null else rests.average().toInt(),
         efforts = efforts(),

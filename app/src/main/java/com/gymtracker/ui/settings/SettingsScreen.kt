@@ -30,6 +30,17 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import com.gymtracker.util.formatLongDate
+import com.gymtracker.util.formatTime
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -61,10 +72,24 @@ fun SettingsScreen(
     val calories = LocalCalories.current
     var weightText by remember { mutableStateOf(formatWeight(s.profileWeightKg)) }
     var showPlates by remember { mutableStateOf(false) }
+    var confirmRestore by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val notify: (String) -> Unit = { msg -> scope.launch { snackbar.showSnackbar(msg, withDismissAction = true) } }
+    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) vm.backupTo(uri, notify)
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.restoreFrom(uri, notify)
+    }
+    val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) vm.enableAutoBackup(uri, notify)
+    }
     if (showPlates) PlateCalculatorDialog(initialWeight = "", onDismiss = { showPlates = false })
 
     ScreenScaffold(
         title = "Réglages",
+        snackbarHostState = snackbar,
         navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") } },
     ) { padding ->
         LazyColumn(
@@ -174,6 +199,56 @@ fun SettingsScreen(
                 }
             }
 
+            item { SectionHeader("Sauvegarde complète") }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        Text(
+                            "Toutes tes données dans un fichier : séances, programmes, catégories, objectifs, " +
+                                "mensurations, photos et réglages.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = { saveLauncher.launch("gymtracker-sauvegarde-${java.time.LocalDate.now()}.zip") },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Sauvegarder") }
+                            OutlinedButton(onClick = { confirmRestore = true }, modifier = Modifier.weight(1f)) { Text("Restaurer") }
+                        }
+                        Text(
+                            "Astuce : en choisissant Google Drive comme emplacement, ta sauvegarde est en ligne.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        )
+                        HorizontalDivider()
+                        SwitchRow(
+                            "Sauvegarde automatique chaque semaine",
+                            s.backupFolderUri?.let { "Dossier : " + folderName(it) + " · garde les 5 dernières" }
+                                ?: "Choisis un dossier du téléphone (ex. Documents).",
+                            s.autoBackupEnabled,
+                        ) { on ->
+                            if (!on) vm.disableAutoBackup()
+                            else if (s.backupFolderUri == null) folderLauncher.launch(null)
+                            else vm.enableAutoBackup(Uri.parse(s.backupFolderUri), notify)
+                        }
+                        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { folderLauncher.launch(null) }) { Text("Choisir le dossier") }
+                            if (s.backupFolderUri != null) {
+                                TextButton(onClick = { vm.backupNowToFolder(notify) }) { Text("Sauvegarder maintenant") }
+                            }
+                        }
+                        Text(
+                            s.lastBackupAt?.let { "Dernière sauvegarde : ${formatLongDate(it)} à ${formatTime(it)}" } ?: "Aucune sauvegarde pour l'instant",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                        )
+                    }
+                }
+            }
+
             item { SectionHeader("Calories") }
             item {
                 Card(Modifier.fillMaxWidth()) {
@@ -206,6 +281,26 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (confirmRestore) {
+        AlertDialog(
+            onDismissRequest = { confirmRestore = false },
+            title = { Text("Restaurer une sauvegarde ?") },
+            text = {
+                Text(
+                    "Toutes les données actuelles de l'appli seront remplacées par celles du fichier choisi. " +
+                        "Fais d'abord une sauvegarde si tu as un doute."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestore = false
+                    restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed"))
+                }) { Text("Choisir le fichier") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRestore = false }) { Text("Annuler") } },
+        )
+    }
 }
 
 @Composable
@@ -221,3 +316,7 @@ private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChan
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
+
+/** Nom lisible d'un dossier choisi (ex. « primary:Documents/GymTracker » → « Documents/GymTracker »). */
+private fun folderName(uri: String): String =
+    Uri.decode(uri).substringAfterLast("/tree/").substringAfter(':').ifBlank { "stockage interne" }

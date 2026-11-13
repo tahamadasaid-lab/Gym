@@ -13,8 +13,8 @@ android {
         applicationId = "com.gymtracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "4.0"
+        versionCode = 6
+        versionName = "5.0"
     }
 
     // Clé de signature personnelle, gardée hors du dépôt (secret GitHub, voir README) : chaque nouvel APK
@@ -83,6 +83,9 @@ dependencies {
     implementation("androidx.room:room-runtime:$room")
     implementation("androidx.room:room-ktx:$room")
     ksp("androidx.room:room-compiler:$room")
+
+    // Sauvegarde automatique hebdomadaire
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     // Affichage des photos d'exercices
     implementation("io.coil-kt:coil-compose:2.7.0")

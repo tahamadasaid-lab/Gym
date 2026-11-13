@@ -28,6 +28,10 @@ data class AppSettings(
     val barWeightKg: Double = 20.0,
     /** Disques disponibles dans ta salle (kg). */
     val availablePlates: List<Double> = StandardPlates,
+    /** Sauvegarde complète automatique chaque semaine dans [backupFolderUri]. */
+    val autoBackupEnabled: Boolean = false,
+    val backupFolderUri: String? = null,
+    val lastBackupAt: Long? = null,
 )
 
 /** Réglages stockés dans les SharedPreferences, exposés en StateFlow. */
@@ -49,7 +53,36 @@ class SettingsStore(context: Context) {
         availablePlates = prefs.getString("plates", null)
             ?.split(';')?.mapNotNull { it.toDoubleOrNull() }
             ?: StandardPlates,
+        autoBackupEnabled = prefs.getBoolean("auto_backup", false),
+        backupFolderUri = prefs.getString("backup_folder", null),
+        lastBackupAt = prefs.getLong("last_backup", 0L).takeIf { it > 0 },
     )
+
+    /** Réglages à inclure dans une sauvegarde (hors dossier de sauvegarde, propre à l'appareil). */
+    fun exportJson(): org.json.JSONObject = org.json.JSONObject().apply {
+        prefs.all.forEach { (k, v) -> if (k !in DEVICE_KEYS && v != null) put(k, v) }
+    }
+
+    fun importJson(json: org.json.JSONObject) {
+        val e = prefs.edit()
+        json.keys().forEach { k ->
+            if (k in DEVICE_KEYS) return@forEach
+            when (val v = json.get(k)) {
+                is Boolean -> e.putBoolean(k, v)
+                is String -> e.putString(k, v)
+                is Int -> if (k in FLOAT_KEYS) e.putFloat(k, v.toFloat()) else e.putInt(k, v)
+                is Long -> e.putLong(k, v)
+                is Double -> e.putFloat(k, v.toFloat())
+            }
+        }
+        e.apply()
+        _settings.value = load()
+    }
+
+    private companion object {
+        val DEVICE_KEYS = setOf("backup_folder", "auto_backup", "last_backup")
+        val FLOAT_KEYS = setOf("profile_weight", "bar_weight")
+    }
 
     fun update(transform: (AppSettings) -> AppSettings) {
         val s = transform(_settings.value)
@@ -64,6 +97,9 @@ class SettingsStore(context: Context) {
             .putFloat("profile_weight", s.profileWeightKg.toFloat())
             .putFloat("bar_weight", s.barWeightKg.toFloat())
             .putString("plates", s.availablePlates.joinToString(";"))
+            .putBoolean("auto_backup", s.autoBackupEnabled)
+            .putString("backup_folder", s.backupFolderUri)
+            .putLong("last_backup", s.lastBackupAt ?: 0L)
             .apply()
         _settings.value = s
     }

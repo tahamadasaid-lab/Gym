@@ -67,9 +67,11 @@ class SessionDetailViewModel(
     val session: StateFlow<SessionWithExercises?> = repo.observeSession(sessionId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun updateSet(set: WorkoutSet, weightKg: Double, reps: Int) = viewModelScope.launch {
-        repo.updateSet(set.copy(weightKg = weightKg, reps = reps))
+    fun updateSet(set: WorkoutSet, weightKg: Double, reps: Int, rpe: Int?) = viewModelScope.launch {
+        repo.updateSet(set.copy(weightKg = weightKg, reps = reps, rpe = rpe))
     }
+
+    fun updateNotes(notes: String) = viewModelScope.launch { repo.updateSessionNotes(sessionId, notes) }
 
     fun deleteSet(set: WorkoutSet) = viewModelScope.launch { repo.deleteSet(set) }
 

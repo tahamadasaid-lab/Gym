@@ -10,7 +10,7 @@ import java.util.Locale
  */
 object CsvCodec {
     private const val SEP = ';'
-    const val header = "type;debut_seance;fin_seance;exercice;groupe;serie;poids_kg;reps;repos_s;heure_serie;degressive;superserie"
+    const val header = "type;debut_seance;fin_seance;exercice;groupe;serie;poids_kg;reps;repos_s;heure_serie;degressive;superserie;echauffement;rpe"
 
     private fun dateFormat() = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
 
@@ -20,6 +20,8 @@ object CsvCodec {
         val restSeconds: Int?,
         val completedAt: Long,
         val isDropSet: Boolean = false,
+        val isWarmup: Boolean = false,
+        val rpe: Int? = null,
     )
     data class ParsedExercise(
         val name: String,
@@ -41,11 +43,12 @@ object CsvCodec {
                         "SERIE", d(s.session.startedAt), d(s.session.endedAt), ex.exercise.name, ex.exercise.muscleGroup,
                         "${i + 1}", num(set.weightKg), "${set.reps}", set.restSeconds?.toString() ?: "", d(set.completedAt),
                         if (set.isDropSet) "1" else "0", ex.sessionExercise.supersetGroup?.toString() ?: "",
+                        if (set.isWarmup) "1" else "0", set.rpe?.toString() ?: "",
                     )
                 }
             }
         }
-        weights.forEach { rows += row("POIDS_CORPS", d(it.date), "", "", "", "", num(it.weightKg), "", "", "", "", "") }
+        weights.forEach { rows += row("POIDS_CORPS", d(it.date), "", "", "", "", num(it.weightKg), "", "", "", "", "", "", "") }
         return rows
     }
 
@@ -77,6 +80,8 @@ object CsvCodec {
                         restSeconds = f.getOrElse(8) { "" }.trim().toIntOrNull(),
                         completedAt = date(f.getOrElse(9) { "" }) ?: (start + ex.sets.size * 1000L),
                         isDropSet = f.getOrElse(10) { "" }.trim() == "1",
+                        isWarmup = f.getOrElse(12) { "" }.trim() == "1",
+                        rpe = f.getOrElse(13) { "" }.trim().toIntOrNull(),
                     )
                 }
                 "POIDS_CORPS" -> {

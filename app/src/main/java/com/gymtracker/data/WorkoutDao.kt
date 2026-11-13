@@ -33,6 +33,33 @@ interface WorkoutDao {
     @Query("UPDATE exercises SET imageUri = :imageUri WHERE id = :id")
     suspend fun updateImage(id: Long, imageUri: String?)
 
+    @Query("UPDATE exercises SET notes = :notes WHERE id = :id")
+    suspend fun updateExerciseNotes(id: Long, notes: String)
+
+    @Query("UPDATE sessions SET notes = :notes WHERE id = :id")
+    suspend fun updateSessionNotes(id: Long, notes: String)
+
+    @Query("UPDATE sets SET rpe = :rpe WHERE id = :id")
+    suspend fun setRpe(id: Long, rpe: Int?)
+
+    /** Séries de travail d'un exercice hors séance donnée (pour détecter un nouveau record). */
+    @Query(
+        """SELECT ws.weightKg AS weightKg, ws.reps AS reps FROM sets ws
+           JOIN session_exercises se ON ws.sessionExerciseId = se.id
+           WHERE se.exerciseId = :exerciseId AND se.sessionId != :excludeSessionId AND ws.isWarmup = 0"""
+    )
+    suspend fun workSetsExcluding(exerciseId: Long, excludeSessionId: Long): List<WeightReps>
+
+    /** Toutes les séries de travail (records, bilans, objectifs). */
+    @Query(
+        """SELECT se.exerciseId AS exerciseId, s.id AS sessionId, s.startedAt AS date, ws.reps AS reps, ws.weightKg AS weightKg
+           FROM sets ws
+           JOIN session_exercises se ON ws.sessionExerciseId = se.id
+           JOIN sessions s ON se.sessionId = s.id
+           WHERE ws.isWarmup = 0"""
+    )
+    fun observeWorkSets(): Flow<List<WorkSetRow>>
+
     @Query("UPDATE exercises SET defaultRestSeconds = :seconds WHERE id = :id")
     suspend fun updateRest(id: Long, seconds: Int)
 
@@ -131,7 +158,7 @@ interface WorkoutDao {
            FROM sets ws
            JOIN session_exercises se ON ws.sessionExerciseId = se.id
            JOIN sessions s ON se.sessionId = s.id
-           WHERE se.exerciseId = :exerciseId
+           WHERE se.exerciseId = :exerciseId AND ws.isWarmup = 0
            ORDER BY s.startedAt, ws.completedAt"""
     )
     fun observeExerciseHistory(exerciseId: Long): Flow<List<SetHistoryRow>>

@@ -17,8 +17,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ProgramExercise::class,
         BodyWeight::class,
         MuscleGroup::class,
+        Goal::class,
+        Measurement::class,
+        ProgressPhoto::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,12 +29,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun programDao(): ProgramDao
     abstract fun bodyWeightDao(): BodyWeightDao
     abstract fun categoryDao(): CategoryDao
+    abstract fun bodyDao(): BodyDao
 
     companion object {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "gymtracker.db")
                 .addCallback(SeedCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }
@@ -78,6 +82,32 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("ALTER TABLE `sets` ADD COLUMN `isDropSet` INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE `session_exercises` ADD COLUMN `supersetGroup` INTEGER")
         db.execSQL("ALTER TABLE `program_exercises` ADD COLUMN `supersetGroup` INTEGER")
+    }
+}
+
+/** v5 : échauffement, RPE, notes, objectifs, mensurations, photos de progression. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `sets` ADD COLUMN `isWarmup` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `sets` ADD COLUMN `rpe` INTEGER")
+        db.execSQL("ALTER TABLE `sessions` ADD COLUMN `notes` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `exercises` ADD COLUMN `notes` TEXT NOT NULL DEFAULT ''")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `goals` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` TEXT NOT NULL, " +
+                "`exerciseId` INTEGER, `targetValue` REAL NOT NULL, `startValue` REAL NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                "`deadline` INTEGER, `achievedAt` INTEGER, " +
+                "FOREIGN KEY(`exerciseId`) REFERENCES `exercises`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_goals_exerciseId` ON `goals` (`exerciseId`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `measurements` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`date` INTEGER NOT NULL, `type` TEXT NOT NULL, `valueCm` REAL NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_measurements_type` ON `measurements` (`type`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `progress_photos` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`date` INTEGER NOT NULL, `path` TEXT NOT NULL, `note` TEXT NOT NULL)"
+        )
     }
 }
 

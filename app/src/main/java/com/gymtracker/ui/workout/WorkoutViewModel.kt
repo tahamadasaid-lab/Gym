@@ -12,7 +12,14 @@ import com.gymtracker.data.SessionSummary
 import com.gymtracker.data.SessionWithExercises
 import com.gymtracker.data.WorkoutRepository
 import com.gymtracker.data.WorkoutSet
+import com.gymtracker.data.RecordEvent
+import com.gymtracker.data.WarmupStep
+import com.gymtracker.data.WeightReps
+import com.gymtracker.data.detectRecord
 import com.gymtracker.data.summary
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import com.gymtracker.data.supersetBlocks
 import com.gymtracker.timer.RestTimer
 import com.gymtracker.util.formatWeight
@@ -33,6 +40,8 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 data class SetInput(val weight: String, val reps: String)
+
+enum class SetKind { NORMAL, WARMUP, DROP }
 
 sealed interface WorkoutUiState {
     data object Loading : WorkoutUiState
@@ -103,10 +112,11 @@ class WorkoutViewModel(
 
     fun inputFor(item: SessionExerciseWithSets, previousSets: List<WorkoutSet>): SetInput {
         inputs[item.sessionExercise.id]?.let { return it }
-        val sets = item.orderedSets
+        val sets = item.orderedSets.filter { it.isWork }
+        val prevWork = previousSets.filter { it.isWork }
         val reference = sets.lastOrNull()
-            ?: previousSets.getOrNull(sets.size)
-            ?: previousSets.lastOrNull()
+            ?: prevWork.getOrNull(sets.size)
+            ?: prevWork.lastOrNull()
         return if (reference != null) SetInput(formatWeight(reference.weightKg), reference.reps.toString())
         else SetInput("", "")
     }
@@ -153,28 +163,55 @@ class WorkoutViewModel(
         inputs.remove(item.sessionExercise.id)
     }
 
+    /** Nouveaux records battus pendant la séance (affichés en bandeau). */
+    private val _records = MutableSharedFlow<RecordEvent>(extraBufferCapacity = 4)
+    val records: SharedFlow<RecordEvent> = _records.asSharedFlow()
+
     /**
      * Enregistre une série. Le minuteur de repos démarre, sauf :
-     * - série dégressive (enchaînée sans repos ; le poids suivant est proposé à −20 %) ;
+     * - échauffement ou série dégressive (pas de repos ; dégressive : poids suivant proposé à −20 %) ;
      * - exercice d'une supersérie qui n'est pas le dernier du bloc (on enchaîne avec le suivant).
      * Retourne false si la saisie est invalide.
      */
-    fun logSet(session: SessionWithExercises, item: SessionExerciseWithSets, input: SetInput, isDropSet: Boolean): Boolean {
+    fun logSet(session: SessionWithExercises, item: SessionExerciseWithSets, input: SetInput, kind: SetKind): Boolean {
         val reps = input.reps.toIntOrNull()?.takeIf { it > 0 } ?: return false
         val weight = if (input.weight.isBlank()) 0.0 else parseWeight(input.weight) ?: return false
-        inputs[item.sessionExercise.id] = if (isDropSet) {
+        inputs[item.sessionExercise.id] = if (kind == SetKind.DROP) {
             input.copy(weight = formatWeight((Math.round(weight * 0.8 / 2.5) * 2.5).coerceAtLeast(0.0)))
         } else input
         viewModelScope.launch {
-            repo.logSet(session.session.id, item.sessionExercise.id, reps, weight, isDropSet)
+            if (kind != SetKind.WARMUP) checkRecord(session, item, weight, reps)
+            repo.logSet(
+                session.session.id, item.sessionExercise.id, reps, weight,
+                isDropSet = kind == SetKind.DROP,
+                isWarmup = kind == SetKind.WARMUP,
+            )
         }
         val block = supersetBlockOf(session, item)
         val chainNext = block.size > 1 && block.last().sessionExercise.id != item.sessionExercise.id
-        if (!isDropSet && !chainNext) {
+        if (kind == SetKind.NORMAL && !chainNext) {
             restTimer.start(item.exercise.defaultRestSeconds, nextLabel(session, item, block))
         }
         return true
     }
+
+    /** Enregistre une série d'échauffement proposée (pas de repos). */
+    fun logWarmup(session: SessionWithExercises, item: SessionExerciseWithSets, step: WarmupStep) = viewModelScope.launch {
+        repo.logSet(session.session.id, item.sessionExercise.id, step.reps, step.weightKg, isWarmup = true)
+    }
+
+    private suspend fun checkRecord(session: SessionWithExercises, item: SessionExerciseWithSets, weight: Double, reps: Int) {
+        val past = repo.workSetsExcluding(item.exercise.id, session.session.id)
+        if (past.isEmpty()) return // premier passage sur cet exercice : pas de record à battre
+        val today = item.sets.filter { it.isWork }.map { WeightReps(it.weightKg, it.reps) }
+        detectRecord(item.exercise.name, past + today, weight, reps)?.let { _records.tryEmit(it) }
+    }
+
+    fun setRpe(set: WorkoutSet, rpe: Int?) = viewModelScope.launch { repo.setRpe(set.id, rpe) }
+
+    fun updateSessionNotes(sessionId: Long, notes: String) = viewModelScope.launch { repo.updateSessionNotes(sessionId, notes) }
+
+    fun updateExerciseNotes(exerciseId: Long, notes: String) = viewModelScope.launch { repo.updateExerciseNotes(exerciseId, notes) }
 
     /** Bloc (supersérie ou exercice seul) contenant cet exercice. */
     fun supersetBlockOf(session: SessionWithExercises, item: SessionExerciseWithSets): List<SessionExerciseWithSets> =
@@ -207,8 +244,8 @@ class WorkoutViewModel(
 
     fun deleteSet(set: WorkoutSet) = viewModelScope.launch { repo.deleteSet(set) }
 
-    fun updateSet(set: WorkoutSet, weightKg: Double, reps: Int) = viewModelScope.launch {
-        repo.updateSet(set.copy(weightKg = weightKg, reps = reps))
+    fun updateSet(set: WorkoutSet, weightKg: Double, reps: Int, rpe: Int?) = viewModelScope.launch {
+        repo.updateSet(set.copy(weightKg = weightKg, reps = reps, rpe = rpe))
     }
 
     fun updateRest(exerciseId: Long, seconds: Int) = viewModelScope.launch { repo.updateRest(exerciseId, seconds) }

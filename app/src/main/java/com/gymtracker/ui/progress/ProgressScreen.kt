@@ -27,7 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -70,15 +70,26 @@ import com.gymtracker.util.formatVolume
 import com.gymtracker.util.formatWeight
 
 @Composable
-fun ProgressScreen(vm: ProgressViewModel = viewModel(factory = AppViewModelProvider.Factory)) {
+fun ProgressScreen(
+    vm: ProgressViewModel = viewModel(factory = AppViewModelProvider.Factory),
+    insights: InsightsViewModel = viewModel(factory = AppViewModelProvider.Factory),
+) {
     val tab by vm.tab.collectAsStateWithLifecycle()
+    val tabs = listOf("Exercices", "Records", "Bilan", "Objectifs", "Corps")
     ScreenScaffold(title = "Progression") { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
-                Tab(selected = tab == 0, onClick = { vm.tab.value = 0 }, text = { Text("Exercices") })
-                Tab(selected = tab == 1, onClick = { vm.tab.value = 1 }, text = { Text("Poids de corps") })
+            ScrollableTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface, edgePadding = 8.dp) {
+                tabs.forEachIndexed { i, label ->
+                    Tab(selected = tab == i, onClick = { vm.tab.value = i }, text = { Text(label) })
+                }
             }
-            if (tab == 0) ExerciseProgress(vm) else BodyWeightContent(vm)
+            when (tab) {
+                0 -> ExerciseProgress(vm)
+                1 -> RecordsTab(insights)
+                2 -> ReviewTab(insights)
+                3 -> GoalsTab(insights)
+                else -> BodyTab(vm, insights)
+            }
         }
     }
 }
@@ -160,7 +171,7 @@ private fun ExerciseProgress(vm: ProgressViewModel) {
 }
 
 @Composable
-private fun BodyWeightContent(vm: ProgressViewModel) {
+fun BodyWeightContent(vm: ProgressViewModel) {
     val entries by vm.bodyWeights.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<BodyWeight?>(null) }

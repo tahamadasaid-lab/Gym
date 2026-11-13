@@ -179,6 +179,7 @@ private fun ExerciseEditDialog(
     var name by remember { mutableStateOf(initial.name) }
     var group by remember { mutableStateOf(initial.muscleGroup) }
     var rest by remember { mutableIntStateOf(initial.defaultRestSeconds) }
+    var notes by remember { mutableStateOf(initial.notes) }
     var imageChange by remember { mutableStateOf<ImageChange>(ImageChange.None) }
     var error by remember { mutableStateOf<String?>(null) }
     var pickRest by remember { mutableStateOf(false) }
@@ -243,7 +244,14 @@ private fun ExerciseEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
-                Text("Catégorie", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Note (réglage, prise…)") },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                Text("Catégorie", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     val names = categories.map { it.name }
                     // Groupe actuel absent des catégories (ancien exercice) : on l'affiche quand même.
@@ -286,7 +294,7 @@ private fun ExerciseEditDialog(
                 if (name.isBlank()) {
                     error = "Le nom est obligatoire"
                 } else {
-                    onSave(initial.copy(name = name, muscleGroup = group, defaultRestSeconds = rest), imageChange) { ok ->
+                    onSave(initial.copy(name = name, muscleGroup = group, defaultRestSeconds = rest, notes = notes.trim()), imageChange) { ok ->
                         if (!ok) error = "Un exercice porte déjà ce nom"
                     }
                 }

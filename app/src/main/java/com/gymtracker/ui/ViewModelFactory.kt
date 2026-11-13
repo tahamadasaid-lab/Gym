@@ -12,6 +12,7 @@ import com.gymtracker.ui.settings.SettingsViewModel
 import com.gymtracker.ui.history.HistoryViewModel
 import com.gymtracker.ui.history.SessionDetailViewModel
 import com.gymtracker.ui.programs.ProgramEditorViewModel
+import com.gymtracker.ui.progress.InsightsViewModel
 import com.gymtracker.ui.progress.ProgressViewModel
 import com.gymtracker.ui.workout.WorkoutViewModel
 
@@ -22,9 +23,10 @@ object AppViewModelProvider {
         initializer { SessionDetailViewModel(createSavedStateHandle(), app().repository) }
         initializer { ProgramEditorViewModel(createSavedStateHandle(), app().repository) }
         initializer { ProgressViewModel(app().repository) }
+        initializer { InsightsViewModel(app().repository, app().imageStore) }
         initializer { ExercisesViewModel(app().repository, app().imageStore) }
         initializer { CategoriesViewModel(app().repository) }
-        initializer { SettingsViewModel(app().settings, app().restTimer) }
+        initializer { SettingsViewModel(app()) }
     }
 }
 

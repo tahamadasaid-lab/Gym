@@ -235,11 +235,13 @@ fun EditSetDialog(
     initialWeight: String,
     initialReps: String,
     onDismiss: () -> Unit,
-    onSave: (weightKg: Double, reps: Int) -> Unit,
+    onSave: (weightKg: Double, reps: Int, rpe: Int?) -> Unit,
     onDelete: (() -> Unit)? = null,
+    initialRpe: Int? = null,
 ) {
     var weight by remember { mutableStateOf(initialWeight) }
     var reps by remember { mutableStateOf(initialReps) }
+    var rpe by remember { mutableStateOf(initialRpe) }
     var error by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -248,6 +250,8 @@ fun EditSetDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 NumberStepper("Poids (kg)", weight, { weight = it; error = false }, step = 2.5, decimal = true)
                 NumberStepper("Répétitions", reps, { reps = it; error = false }, step = 1.0, decimal = false)
+                Text("Effort ressenti (RPE)", style = MaterialTheme.typography.labelMedium)
+                RpeSelector(rpe, onSelect = { rpe = if (rpe == it) null else it })
                 if (error) {
                     Text("Valeurs invalides", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
@@ -262,7 +266,7 @@ fun EditSetDialog(
             TextButton(onClick = {
                 val r = reps.toIntOrNull()?.takeIf { it > 0 }
                 val w = if (weight.isBlank()) 0.0 else parseWeight(weight)
-                if (r == null || w == null) error = true else onSave(w, r)
+                if (r == null || w == null) error = true else onSave(w, r, rpe)
             }) { Text("Enregistrer") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
@@ -277,6 +281,7 @@ fun TextInputDialog(
     confirmLabel: String = "OK",
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    allowEmpty: Boolean = false,
 ) {
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
@@ -292,8 +297,41 @@ fun TextInputDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(text.trim()) }, enabled = text.isNotBlank()) { Text(confirmLabel) }
+            TextButton(onClick = { onConfirm(text.trim()) }, enabled = allowEmpty || text.isNotBlank()) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
+}
+
+/** Échelle RPE : 10 = échec, 9 = 1 rep en réserve, 8 = 2 reps, 7 = 3 reps, 6 = facile. */
+val RpeValues = listOf(6, 7, 8, 9, 10)
+
+fun rpeHint(rpe: Int): String = when (rpe) {
+    10 -> "échec"
+    9 -> "1 rep en réserve"
+    8 -> "2 reps en réserve"
+    7 -> "3 reps en réserve"
+    else -> "facile"
+}
+
+@Composable
+fun RpeSelector(selected: Int?, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            RpeValues.forEach { v ->
+                FilterChip(
+                    selected = selected == v,
+                    onClick = { onSelect(v) },
+                    label = { Text("$v") },
+                )
+            }
+        }
+        if (selected != null) {
+            Text(
+                "RPE $selected : ${rpeHint(selected)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

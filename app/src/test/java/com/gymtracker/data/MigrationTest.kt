@@ -35,7 +35,7 @@ class MigrationTest {
     )
 
     @Test
-    fun migrate1To4_keepsData() = runBlocking {
+    fun migrate1To5_keepsData() = runBlocking {
         val name = "migration-test.db"
         context.deleteDatabase(name)
         val file = context.getDatabasePath(name).apply { parentFile?.mkdirs() }
@@ -51,7 +51,7 @@ class MigrationTest {
         }
 
         val room = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .allowMainThreadQueries()
             .build()
         try {
@@ -65,6 +65,10 @@ class MigrationTest {
             // v4 : anciennes séries = séries normales, pas de supersérie
             assertTrue(ex.orderedSets.none { it.isDropSet })
             assertNull(ex.sessionExercise.supersetGroup)
+            // v5 : pas d'échauffement, pas de RPE, notes vides
+            assertTrue(ex.orderedSets.all { it.isWork && it.rpe == null })
+            assertEquals("", sessions.single().session.notes)
+            assertEquals("", ex.exercise.notes)
 
             // v3 : catégories par défaut + groupes déjà utilisés par les exercices.
             val categories = room.categoryDao().observeAll().first().map { it.name }

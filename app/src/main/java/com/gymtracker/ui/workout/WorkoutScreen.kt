@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package com.gymtracker.ui.workout
 
@@ -78,6 +78,21 @@ import com.gymtracker.data.effort
 import com.gymtracker.data.efforts
 import com.gymtracker.data.volume
 import com.gymtracker.data.supersetBlocks
+import com.gymtracker.ui.progress.GoalCard
+import com.gymtracker.ui.progress.InsightsViewModel
+import com.gymtracker.data.RecordEvent
+import com.gymtracker.data.WarmupStep
+import com.gymtracker.data.suggestNext
+import com.gymtracker.ui.components.RpeSelector
+import com.gymtracker.util.parseWeight
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.gymtracker.ui.components.PlateCalculatorDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
@@ -142,6 +157,8 @@ private fun HomeScreen(
     onOpenSession: (Long) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val insights: InsightsViewModel = viewModel(factory = AppViewModelProvider.Factory)
+    val goals by insights.goals.collectAsStateWithLifecycle()
     ScreenScaffold(
         title = "GymTracker",
         actions = { IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, "Réglages") } },
@@ -152,6 +169,12 @@ private fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { HeroCard(state, onStartFree) }
+
+            val activeGoals = goals.orEmpty().filter { !it.achieved }.take(2)
+            if (activeGoals.isNotEmpty()) {
+                item { SectionHeader("Objectifs en cours") }
+                items(activeGoals, key = { "g" + it.goal.id }) { GoalCard(it) }
+            }
 
             item {
                 SectionHeader("Mes programmes") {
@@ -320,6 +343,21 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
     var removeTarget by remember { mutableStateOf<SessionExerciseWithSets?>(null) }
     var editSet by remember { mutableStateOf<Pair<WorkoutSet, Int>?>(null) }
     var viewImage by remember { mutableStateOf<Exercise?>(null) }
+    var noteEdit by remember { mutableStateOf<Exercise?>(null) }
+    var record by remember { mutableStateOf<RecordEvent?>(null) }
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(Unit) {
+        vm.records.collect { event ->
+            record = event
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+    LaunchedEffect(record) {
+        if (record != null) {
+            delay(6000)
+            record = null
+        }
+    }
 
     // Garde l'écran allumé pendant la séance.
     val view = LocalView.current
@@ -368,11 +406,19 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
             }
         },
     ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).imePadding(),
+            modifier = Modifier.fillMaxSize().imePadding(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            item(key = "session-notes") {
+                SessionNotesField(
+                    sessionId = session.session.id,
+                    saved = session.session.notes,
+                    onSave = { vm.updateSessionNotes(session.session.id, it) },
+                )
+            }
             if (session.exercises.isEmpty()) {
                 item(key = "hint") {
                     Text(
@@ -395,7 +441,10 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
                     previousSets = prev,
                     input = vm.inputFor(item, prev),
                     onInputChange = { vm.updateInput(item.sessionExercise.id, it) },
-                    onLogSet = { input, drop -> vm.logSet(session, item, input, drop) },
+                    onLogSet = { input, kind -> vm.logSet(session, item, input, kind) },
+                    onLogWarmup = { step -> vm.logWarmup(session, item, step) },
+                    onSetRpe = { set, rpe -> vm.setRpe(set, rpe) },
+                    onEditNote = { noteEdit = item.exercise },
                     superset = info,
                     canLinkNext = next != null &&
                         (item.sessionExercise.supersetGroup == null || next.sessionExercise.supersetGroup != item.sessionExercise.supersetGroup),
@@ -421,6 +470,8 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
                 }
             }
         }
+        RecordBanner(record, onDismiss = { record = null }, modifier = Modifier.align(Alignment.TopCenter))
+        }
     }
 
     if (showPicker) {
@@ -438,11 +489,23 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
             initialWeight = formatWeight(set.weightKg),
             initialReps = set.reps.toString(),
             onDismiss = { editSet = null },
-            onSave = { w, r -> vm.updateSet(set, w, r); editSet = null },
+            onSave = { w, r, rpe -> vm.updateSet(set, w, r, rpe); editSet = null },
             onDelete = { vm.deleteSet(set); editSet = null },
+            initialRpe = set.rpe,
         )
     }
     viewImage?.let { ImageViewerDialog(it, onDismiss = { viewImage = null }) }
+    noteEdit?.let { ex ->
+        TextInputDialog(
+            title = "Note · ${ex.name}",
+            label = "Ex. réglage siège : 4, prise serrée…",
+            initial = ex.notes,
+            confirmLabel = "Enregistrer",
+            allowEmpty = true,
+            onDismiss = { noteEdit = null },
+            onConfirm = { vm.updateExerciseNotes(ex.id, it); noteEdit = null },
+        )
+    }
     restEdit?.let { item ->
         RestPickerDialog(
             exerciseName = item.exercise.name,
@@ -515,7 +578,10 @@ private fun ExerciseCard(
     previousSets: List<WorkoutSet>,
     input: SetInput,
     onInputChange: (SetInput) -> Unit,
-    onLogSet: (SetInput, Boolean) -> Boolean,
+    onLogSet: (SetInput, SetKind) -> Boolean,
+    onLogWarmup: (WarmupStep) -> Unit,
+    onSetRpe: (WorkoutSet, Int?) -> Unit,
+    onEditNote: () -> Unit,
     superset: SupersetInfo?,
     canLinkNext: Boolean,
     onLinkNext: () -> Unit,
@@ -526,12 +592,17 @@ private fun ExerciseCard(
     onRemove: () -> Unit,
 ) {
     var error by remember { mutableStateOf(false) }
-    var dropMode by remember { mutableStateOf(false) }
+    var kind by remember { mutableStateOf(SetKind.NORMAL) }
     var showPlates by remember { mutableStateOf(false) }
+    var showWarmup by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
-    val sets = item.orderedSets
+    val allSets = item.orderedSets
+    val warmups = allSets.filter { it.isWarmup }
+    val sets = allSets.filter { it.isWork }
+    val prevWork = previousSets.filter { it.isWork }
     val target = item.sessionExercise.targetSets
     val targetReached = target != null && sets.size >= target
+    val suggestion = remember(previousSets, item.exercise.muscleGroup) { suggestNext(previousSets, item.exercise.muscleGroup) }
     val accent = MaterialTheme.colorScheme.tertiary
 
     Card(
@@ -611,6 +682,11 @@ private fun ExerciseCard(
                             )
                         }
                         DropdownMenuItem(
+                            text = { Text("Note de l'exercice") },
+                            leadingIcon = { Icon(Icons.Filled.EditNote, null) },
+                            onClick = { menuOpen = false; onEditNote() },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Calculer les disques") },
                             leadingIcon = { Icon(Icons.Filled.Calculate, null) },
                             onClick = { menuOpen = false; showPlates = true },
@@ -623,6 +699,39 @@ private fun ExerciseCard(
                     }
                 }
             }
+            if (item.exercise.notes.isNotBlank()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(MaterialTheme.shapes.small).clickable(onClick = onEditNote),
+                ) {
+                    Text(
+                        "📌 ${item.exercise.notes}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+            }
+            if (suggestion != null && sets.isEmpty()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                ) {
+                    Row(Modifier.padding(start = 10.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "💡 Conseil : " + (if (suggestion.weightKg > 0) "${formatWeight(suggestion.weightKg)} kg × " else "") + "${suggestion.reps}",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(suggestion.reason, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = {
+                            onInputChange(SetInput(if (suggestion.weightKg > 0) formatWeight(suggestion.weightKg) else input.weight, "${suggestion.reps}"))
+                        }) { Text("Appliquer") }
+                    }
+                }
+            }
             if (target != null) {
                 LinearProgressIndicator(
                     progress = { (sets.size.toFloat() / target).coerceAtMost(1f) },
@@ -631,8 +740,8 @@ private fun ExerciseCard(
                 )
             }
 
-            val rows = maxOf(sets.size, previousSets.size, target ?: 0)
-            if (rows > 0) {
+            val rows = maxOf(sets.size, prevWork.size, target ?: 0)
+            if (rows > 0 || warmups.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                     HeaderText("Série", Modifier.width(44.dp))
@@ -641,16 +750,26 @@ private fun ExerciseCard(
                     HeaderText("Repos", Modifier.width(44.dp))
                 }
             }
+            warmups.forEachIndexed { i, w ->
+                SetRow(index = i, previous = null, set = w, onClick = { onEditSet(w, i) })
+            }
             for (i in 0 until rows) {
                 val set = sets.getOrNull(i)
                 SetRow(
                     index = i,
-                    previous = previousSets.getOrNull(i),
+                    previous = prevWork.getOrNull(i),
                     set = set,
                     onClick = set?.let { { onEditSet(it, i) } },
                 )
             }
-            if (sets.isNotEmpty()) {
+            val last = allSets.lastOrNull()
+            if (last != null && last.isWork && !last.isDropSet && last.rpe == null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp, top = 4.dp)) {
+                    Text("Ressenti ?", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(end = 8.dp))
+                    RpeSelector(null, onSelect = { onSetRpe(last, it) })
+                }
+            }
+            if (allSets.isNotEmpty()) {
                 Text(
                     "Touche une série pour la modifier ou la supprimer",
                     style = MaterialTheme.typography.labelSmall,
@@ -660,12 +779,23 @@ private fun ExerciseCard(
             }
 
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
-                    selected = dropMode,
-                    onClick = { dropMode = !dropMode },
+                    selected = kind == SetKind.WARMUP,
+                    onClick = { kind = if (kind == SetKind.WARMUP) SetKind.NORMAL else SetKind.WARMUP },
+                    label = { Text("Échauffement") },
+                    leadingIcon = { Icon(Icons.Filled.Whatshot, null, Modifier.size(FilterChipDefaults.IconSize)) },
+                )
+                FilterChip(
+                    selected = kind == SetKind.DROP,
+                    onClick = { kind = if (kind == SetKind.DROP) SetKind.NORMAL else SetKind.DROP },
                     label = { Text("Dégressive") },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.TrendingDown, null, Modifier.size(FilterChipDefaults.IconSize)) },
+                )
+                AssistChip(
+                    onClick = { showWarmup = true },
+                    label = { Text("Échauffement auto") },
+                    leadingIcon = { Icon(Icons.Filled.AutoAwesome, null, Modifier.size(AssistChipDefaults.IconSize)) },
                 )
                 AssistChip(
                     onClick = { showPlates = true },
@@ -698,14 +828,33 @@ private fun ExerciseCard(
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(
-                    onClick = { error = !onLogSet(input, dropMode) },
+                    onClick = { error = !onLogSet(input, kind) },
                     modifier = Modifier.weight(1f).height(50.dp),
-                    colors = if (dropMode) ButtonDefaults.buttonColors(containerColor = accent, contentColor = MaterialTheme.colorScheme.onTertiary)
-                    else ButtonDefaults.buttonColors(),
+                    colors = when (kind) {
+                        SetKind.DROP -> ButtonDefaults.buttonColors(containerColor = accent, contentColor = MaterialTheme.colorScheme.onTertiary)
+                        SetKind.WARMUP -> ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        )
+                        SetKind.NORMAL -> ButtonDefaults.buttonColors()
+                    },
                 ) {
-                    Icon(if (dropMode) Icons.AutoMirrored.Filled.TrendingDown else Icons.Filled.Check, null)
+                    Icon(
+                        when (kind) {
+                            SetKind.DROP -> Icons.AutoMirrored.Filled.TrendingDown
+                            SetKind.WARMUP -> Icons.Filled.Whatshot
+                            SetKind.NORMAL -> Icons.Filled.Check
+                        },
+                        null,
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text(if (dropMode) "Valider la dégressive" else "Valider la série ${sets.size + 1}")
+                    Text(
+                        when (kind) {
+                            SetKind.DROP -> "Valider la dégressive"
+                            SetKind.WARMUP -> "Valider l'échauffement"
+                            SetKind.NORMAL -> "Valider la série ${sets.size + 1}"
+                        }
+                    )
                 }
                 Spacer(Modifier.width(8.dp))
                 AssistChip(
@@ -715,7 +864,8 @@ private fun ExerciseCard(
                 )
             }
             val hint = when {
-                dropMode -> "Dégressive : pas de repos, le poids suivant est proposé à −20 %."
+                kind == SetKind.DROP -> "Dégressive : pas de repos, le poids suivant est proposé à −20 %."
+                kind == SetKind.WARMUP -> "Échauffement : pas de repos, ne compte ni dans le volume ni dans les records."
                 superset != null && !superset.isLast -> "Supersérie : pas de repos, enchaîne avec ${superset.nextName}."
                 else -> null
             }
@@ -730,6 +880,14 @@ private fun ExerciseCard(
         }
     }
 
+    if (showWarmup) {
+        WarmupDialog(
+            workWeight = parseWeight(input.weight) ?: 0.0,
+            done = warmups,
+            onLog = onLogWarmup,
+            onDismiss = { showWarmup = false },
+        )
+    }
     if (showPlates) {
         PlateCalculatorDialog(
             initialWeight = input.weight,
@@ -748,8 +906,10 @@ private fun HeaderText(text: String, modifier: Modifier) {
 private fun SetRow(index: Int, previous: WorkoutSet?, set: WorkoutSet?, onClick: (() -> Unit)?) {
     val done = set != null
     val drop = set?.isDropSet == true
+    val warm = set?.isWarmup == true
     Surface(
         color = when {
+            warm -> MaterialTheme.colorScheme.surfaceContainerHighest
             drop -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f)
             done -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
             else -> Color.Transparent
@@ -771,6 +931,7 @@ private fun SetRow(index: Int, previous: WorkoutSet?, set: WorkoutSet?, onClick:
                         .clip(CircleShape)
                         .background(
                             when {
+                                warm -> MaterialTheme.colorScheme.outline
                                 drop -> MaterialTheme.colorScheme.tertiary
                                 done -> MaterialTheme.colorScheme.secondary
                                 else -> MaterialTheme.colorScheme.surfaceVariant
@@ -778,7 +939,9 @@ private fun SetRow(index: Int, previous: WorkoutSet?, set: WorkoutSet?, onClick:
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (drop) {
+                    if (warm) {
+                        Text("É", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold)
+                    } else if (drop) {
                         Text("D", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onTertiary, fontWeight = FontWeight.Bold)
                     } else if (done) {
                         Icon(Icons.Filled.Check, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSecondary)
@@ -794,7 +957,9 @@ private fun SetRow(index: Int, previous: WorkoutSet?, set: WorkoutSet?, onClick:
                 modifier = Modifier.weight(1f),
             )
             Text(
-                set?.let { (if (it.isDropSet) "↘ " else "") + "${formatWeight(it.weightKg)} kg × ${it.reps}" } ?: "",
+                set?.let {
+                    (if (it.isDropSet) "↘ " else "") + "${formatWeight(it.weightKg)} kg × ${it.reps}" + (it.rpe?.let { r -> "  @$r" } ?: "")
+                } ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1.2f),

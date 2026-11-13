@@ -27,6 +27,16 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 - Sinon : résumé de la semaine et bouton « Démarrer une séance ».
 - Ajout : appui long sur l'écran d'accueil › Widgets › GymTracker.
 
+### Coaching pendant la séance
+- **Progression conseillée** : « 💡 82,5 kg × 8 » si tu as réussi toutes tes reps la dernière fois
+  (+2,5 kg ; +1,25 kg en isolation ; +5 kg au-delà de 100 kg en jambes/dos), sinon même charge.
+  Bouton « Appliquer » pour pré-remplir.
+- **Échauffement** : bouton « Échauffement » (badge **É**, exclu du volume, des records et des stats) et
+  **échauffement auto** (barre, 40 %, 60 %, 80 % de la charge, arrondis à tes disques).
+- **Effort ressenti (RPE 6–10)** après chaque série ; il affine le conseil de progression.
+- **Notes** : note de séance (sauvegardée automatiquement) et note fixe par exercice (« siège : 4 »).
+- **Nouveau record** : bandeau 🏆 + vibration quand tu bats ton record de poids ou de 1RM estimé.
+
 ### Minuteur de repos
 - Lancé automatiquement à chaque série validée (durée réglable par exercice).
 - **Épinglé en bas de l'écran** sur tous les onglets : plus besoin de remonter pour voir le temps restant.
@@ -49,10 +59,22 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 - **Correction des séances passées** : modifier, supprimer ou ajouter une série.
 - **Export / import CSV** (menu ⋮) : sauvegarde, ou analyse dans Excel / Google Sheets.
 
-### Progression
+### Progression (onglets)
+- **Records** : poids max, 1RM estimé, meilleur volume et meilleure charge à 1, 3, 5, 8, 10 et 12 reps.
+- **Bilan** semaine / mois : séances, durée, séries, volume, calories (comparés à la période précédente),
+  **carte du corps** (muscles travaillés), séries par catégorie, régularité (semaines d'affilée).
+- **Objectifs** : charge sur un exercice ou poids de corps, avec échéance et barre de progression
+  (aussi affichés sur l'accueil).
+- **Corps** : poids, **mensurations** (bras, taille, cuisse…) et **photos de progression** (avant / après).
 - Pour chaque exercice : record de poids, 1RM estimé (formule d'Epley), meilleur volume, nombre de séances.
 - Graphique de l'évolution par séance : poids max, 1RM estimé, volume ou reps max.
 - **Poids de corps** : pesées, graphique et évolution.
+
+### Sauvegarde complète
+- Réglages › **Sauvegarde complète** : un fichier ZIP avec toutes les données (séances, programmes,
+  catégories, objectifs, mensurations, **photos** et réglages). Choisis Google Drive comme emplacement
+  pour l'avoir en ligne. **Restaurer** remplace les données par celles du fichier.
+- **Sauvegarde automatique hebdomadaire** dans un dossier du téléphone (garde les 5 dernières).
 
 ### Apparence
 - Thème **Système / Clair / Sombre** au choix (⚙ Réglages), et option **noir intégral** pour écrans OLED.
@@ -152,16 +174,18 @@ app/src/main/java/com/gymtracker/
     └── theme/
 ```
 
-### Modèle de données (v4)
+### Modèle de données (v5)
 | Table | Contenu |
 |---|---|
 | `exercises` | nom, groupe musculaire, repos par défaut, photo |
 | `sessions` | début, fin |
 | `session_exercises` | exercice réalisé dans une séance (ordre, séries visées, supersérie) |
-| `sets` | poids, répétitions, heure, repos réel avant la série, dégressive |
+| `sets` | poids, répétitions, heure, repos réel, dégressive, échauffement, RPE |
 | `programs` / `program_exercises` | programmes et leurs exercices |
 | `body_weights` | pesées |
 | `muscle_groups` | catégories : nom, couleur, pictogramme, intensité (MET) |
+| `goals` | objectifs (exercice ou poids de corps), échéance |
+| `measurements` / `progress_photos` | mensurations et photos de progression |
 
-Les mises à jour (v1 → v2 → v3 → v4) conservent toutes les données (migrations testées dans `MigrationTest`).
+Les mises à jour (v1 → v2 → v3 → v4 → v5) conservent toutes les données (migrations testées dans `MigrationTest`).
 Tests : `./gradlew testDebugUnitTest`.
