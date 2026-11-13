@@ -13,7 +13,7 @@ class WorkoutRepository(private val db: AppDatabase) {
     private val programDao = db.programDao()
     private val bodyDao = db.bodyWeightDao()
     private val categoryDao = db.categoryDao()
-    private val bodyDao = db.bodyDao()
+    private val extrasDao = db.bodyDao()
 
     // ---------------------------------------------------------------- Notes, RPE, records
     suspend fun updateSessionNotes(sessionId: Long, notes: String) = dao.updateSessionNotes(sessionId, notes)
@@ -23,17 +23,17 @@ class WorkoutRepository(private val db: AppDatabase) {
     fun observeWorkSets(): Flow<List<WorkSetRow>> = dao.observeWorkSets()
 
     // ---------------------------------------------------------------- Objectifs, mensurations, photos
-    fun observeGoals(): Flow<List<Goal>> = bodyDao.observeGoals()
-    suspend fun addGoal(goal: Goal) = bodyDao.insertGoal(goal)
-    suspend fun updateGoal(goal: Goal) = bodyDao.updateGoal(goal)
-    suspend fun deleteGoal(goal: Goal) = bodyDao.deleteGoal(goal)
-    fun observeMeasurements(): Flow<List<Measurement>> = bodyDao.observeMeasurements()
+    fun observeGoals(): Flow<List<Goal>> = extrasDao.observeGoals()
+    suspend fun addGoal(goal: Goal) = extrasDao.insertGoal(goal)
+    suspend fun updateGoal(goal: Goal) = extrasDao.updateGoal(goal)
+    suspend fun deleteGoal(goal: Goal) = extrasDao.deleteGoal(goal)
+    fun observeMeasurements(): Flow<List<Measurement>> = extrasDao.observeMeasurements()
     suspend fun addMeasurement(type: String, valueCm: Double, date: Long = System.currentTimeMillis()) =
-        bodyDao.insertMeasurement(Measurement(date = date, type = type, valueCm = valueCm))
-    suspend fun deleteMeasurement(m: Measurement) = bodyDao.deleteMeasurement(m)
-    fun observePhotos(): Flow<List<ProgressPhoto>> = bodyDao.observePhotos()
-    suspend fun addPhoto(path: String, date: Long = System.currentTimeMillis()) = bodyDao.insertPhoto(ProgressPhoto(date = date, path = path))
-    suspend fun deletePhoto(p: ProgressPhoto) = bodyDao.deletePhoto(p)
+        extrasDao.insertMeasurement(Measurement(date = date, type = type, valueCm = valueCm))
+    suspend fun deleteMeasurement(m: Measurement) = extrasDao.deleteMeasurement(m)
+    fun observePhotos(): Flow<List<ProgressPhoto>> = extrasDao.observePhotos()
+    suspend fun addPhoto(path: String, date: Long = System.currentTimeMillis()) = extrasDao.insertPhoto(ProgressPhoto(date = date, path = path))
+    suspend fun deletePhoto(p: ProgressPhoto) = extrasDao.deletePhoto(p)
 
     // ---------------------------------------------------------------- Catégories
     fun observeCategories(): Flow<List<MuscleGroup>> = categoryDao.observeAll()
