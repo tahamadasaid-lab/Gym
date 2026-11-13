@@ -17,23 +17,33 @@ android {
         versionName = "3.1"
     }
 
-    // Clé de signature fixe (versionnée) : chaque nouvel APK peut s'installer par-dessus le précédent
-    // sans perdre les données. Usage personnel uniquement.
+    // Clé de signature personnelle, gardée hors du dépôt (secret GitHub, voir README) : chaque nouvel APK
+    // peut s'installer par-dessus le précédent sans perdre les données.
+    // GYMTRACKER_KEYSTORE = chemin du fichier (défaut : app/signing.keystore), GYMTRACKER_KEYSTORE_PASSWORD = mot de passe.
+    val keystoreFile = file(System.getenv("GYMTRACKER_KEYSTORE") ?: "signing.keystore")
+    val keystorePassword = System.getenv("GYMTRACKER_KEYSTORE_PASSWORD")
     signingConfigs {
-        getByName("debug") {
-            storeFile = file("gymtracker-debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        if (keystoreFile.exists() && !keystorePassword.isNullOrEmpty()) {
+            create("personal") {
+                storeFile = keystoreFile
+                storePassword = keystorePassword
+                keyAlias = "gymtracker"
+                keyPassword = keystorePassword
+            }
         }
     }
+    // Sans la clé (ex. compilation locale), Android Studio utilise sa clé de debug habituelle.
+    val personal = signingConfigs.findByName("personal")
 
     buildTypes {
+        getByName("debug") {
+            if (personal != null) signingConfig = personal
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signé avec la clé de debug pour pouvoir l'installer directement (usage personnel).
-            signingConfig = signingConfigs.getByName("debug")
+            // Usage personnel : installable directement.
+            signingConfig = personal ?: signingConfigs.getByName("debug")
         }
     }
 

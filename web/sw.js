@@ -1,5 +1,5 @@
 // Service worker : met l'application en cache pour qu'elle fonctionne hors ligne.
-const VERSION = 'gymtracker-v1';
+const VERSION = 'gymtracker-v2';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/store.js', 'js/util.js', 'js/csv.js',
@@ -18,13 +18,15 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Réseau d'abord (pour récupérer les mises à jour), cache en secours hors ligne.
+// Réseau d'abord (pour récupérer les mises à jour), cache en secours hors ligne ou si le site ne répond plus.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
     fetch(e.request)
       .then((res) => {
-        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
+        if (!res.ok) throw new Error(String(res.status)); // site indisponible (ex. dépôt repassé en privé)
+        const copy = res.clone();
+        caches.open(VERSION).then((c) => c.put(e.request, copy));
         return res;
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('index.html')))

@@ -60,6 +60,12 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 2. Dézippe et copie `app-debug.apk` sur ton téléphone.
 3. Ouvre-le et autorise l'installation depuis des sources inconnues.
 
+**Clé de signature** : pour que chaque nouvel APK s'installe par-dessus le précédent (sans perdre les
+données), le workflow signe l'APK avec une clé personnelle stockée dans deux secrets GitHub
+(*Settings › Secrets and variables › Actions*) : `SIGNING_KEYSTORE_BASE64` (fichier de clé encodé en base64)
+et `SIGNING_PASSWORD`. La clé n'est jamais versionnée dans le dépôt. Sans ces secrets, l'APK est signé avec
+une clé temporaire.
+
 ### Option 2 : compiler avec Android Studio
 1. Ouvre le dossier du projet dans Android Studio (Ladybug ou plus récent).
 2. Branche ton téléphone (mode développeur + débogage USB activés) et clique sur ▶ *Run*.

@@ -18,7 +18,20 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Clé de signature (secret GitHub)
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/signing.keystore"
+            echo "GYMTRACKER_KEYSTORE=$RUNNER_TEMP/signing.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Secrets SIGNING_KEYSTORE_BASE64 / SIGNING_PASSWORD absents : APK signé avec une clé temporaire, il ne pourra pas s'installer par-dessus la version précédente."
+          fi
+
       - name: Build debug APK
+        env:
+          GYMTRACKER_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
