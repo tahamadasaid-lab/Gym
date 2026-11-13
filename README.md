@@ -74,9 +74,17 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 
 **Clé de signature** : pour que chaque nouvel APK s'installe par-dessus le précédent (sans perdre les
 données), le workflow signe l'APK avec une clé personnelle stockée dans deux secrets GitHub
-(*Settings › Secrets and variables › Actions*) : `SIGNING_KEYSTORE_BASE64` (fichier de clé encodé en base64)
-et `SIGNING_PASSWORD`. La clé n'est jamais versionnée dans le dépôt. Sans ces secrets, l'APK est signé avec
-une clé temporaire.
+(*Settings › Secrets and variables › Actions*) :
+
+| Secret | Contenu |
+|---|---|
+| `SIGNING_KEYSTORE_BASE64` | fichier de clé encodé en base64 |
+| `SIGNING_PASSWORD` | mot de passe du fichier et de la clé |
+| `SIGNING_KEY_ALIAS` | alias de la clé dans le fichier (facultatif, `gymtracker` par défaut) |
+
+La clé n'est plus versionnée dans le dépôt. Sans ces secrets, l'APK est signé avec une clé temporaire
+(un avertissement s'affiche dans le run). Pour mettre à jour une installation faite avec les versions 2 et 3
+(signées avec l'ancienne clé de debug du dépôt), il faut réutiliser cette clé : alias `androiddebugkey`.
 
 ### Option 2 : compiler avec Android Studio
 1. Ouvre le dossier du projet dans Android Studio (Ladybug ou plus récent).

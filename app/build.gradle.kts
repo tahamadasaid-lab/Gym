@@ -22,12 +22,14 @@ android {
     // GYMTRACKER_KEYSTORE = chemin du fichier (défaut : app/signing.keystore), GYMTRACKER_KEYSTORE_PASSWORD = mot de passe.
     val keystoreFile = file(System.getenv("GYMTRACKER_KEYSTORE") ?: "signing.keystore")
     val keystorePassword = System.getenv("GYMTRACKER_KEYSTORE_PASSWORD")
+    // Alias de la clé dans le fichier (GYMTRACKER_KEY_ALIAS, défaut : gymtracker).
+    val keyAliasName = System.getenv("GYMTRACKER_KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "gymtracker"
     signingConfigs {
         if (keystoreFile.exists() && !keystorePassword.isNullOrEmpty()) {
             create("personal") {
                 storeFile = keystoreFile
                 storePassword = keystorePassword
-                keyAlias = "gymtracker"
+                keyAlias = keyAliasName
                 keyPassword = keystorePassword
             }
         }

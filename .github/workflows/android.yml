@@ -32,6 +32,7 @@ jobs:
       - name: Build debug APK
         env:
           GYMTRACKER_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+          GYMTRACKER_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
