@@ -73,6 +73,11 @@ class SessionDetailViewModel(
 
     fun updateNotes(notes: String) = viewModelScope.launch { repo.updateSessionNotes(sessionId, notes) }
 
+    fun createProgram(name: String, onDone: () -> Unit) = viewModelScope.launch {
+        repo.createProgramFromSessions(listOf(sessionId), name)
+        onDone()
+    }
+
     fun deleteSet(set: WorkoutSet) = viewModelScope.launch { repo.deleteSet(set) }
 
     fun addSet(sessionExerciseId: Long, weightKg: Double, reps: Int) = viewModelScope.launch {

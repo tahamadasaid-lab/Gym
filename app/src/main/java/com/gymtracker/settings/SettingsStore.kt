@@ -32,6 +32,16 @@ data class AppSettings(
     val autoBackupEnabled: Boolean = false,
     val backupFolderUri: String? = null,
     val lastBackupAt: Long? = null,
+    /** Planning : jour (1 = lundi … 7 = dimanche) → programme (0 = séance libre). */
+    val weekPlan: Map<Int, Long> = emptyMap(),
+    val reminderEnabled: Boolean = false,
+    /** Heure du rappel, en minutes depuis minuit. */
+    val reminderMinutes: Int = 18 * 60,
+    /** Health Connect : envoi automatique des séances. */
+    val healthSyncEnabled: Boolean = false,
+    /** Âge et sexe (« H » / « F ») : calcul des calories à partir de la fréquence cardiaque. */
+    val age: Int? = null,
+    val sex: String? = null,
 )
 
 /** Réglages stockés dans les SharedPreferences, exposés en StateFlow. */
@@ -56,6 +66,15 @@ class SettingsStore(context: Context) {
         autoBackupEnabled = prefs.getBoolean("auto_backup", false),
         backupFolderUri = prefs.getString("backup_folder", null),
         lastBackupAt = prefs.getLong("last_backup", 0L).takeIf { it > 0 },
+        weekPlan = prefs.getString("week_plan", null).orEmpty().split(';').mapNotNull { e ->
+            val (d, p) = e.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+            d.toIntOrNull()?.let { day -> p.toLongOrNull()?.let { day to it } }
+        }.toMap(),
+        reminderEnabled = prefs.getBoolean("reminder", false),
+        reminderMinutes = prefs.getInt("reminder_minutes", 18 * 60),
+        healthSyncEnabled = prefs.getBoolean("health_sync", false),
+        age = prefs.getInt("age", 0).takeIf { it > 0 },
+        sex = prefs.getString("sex", null),
     )
 
     /** Réglages à inclure dans une sauvegarde (hors dossier de sauvegarde, propre à l'appareil). */
@@ -100,6 +119,12 @@ class SettingsStore(context: Context) {
             .putBoolean("auto_backup", s.autoBackupEnabled)
             .putString("backup_folder", s.backupFolderUri)
             .putLong("last_backup", s.lastBackupAt ?: 0L)
+            .putString("week_plan", s.weekPlan.entries.joinToString(";") { "${it.key}:${it.value}" })
+            .putBoolean("reminder", s.reminderEnabled)
+            .putInt("reminder_minutes", s.reminderMinutes)
+            .putBoolean("health_sync", s.healthSyncEnabled)
+            .putInt("age", s.age ?: 0)
+            .putString("sex", s.sex)
             .apply()
         _settings.value = s
     }

@@ -9,6 +9,8 @@ import com.gymtracker.data.WorkoutRepository
 import com.gymtracker.data.efforts
 import com.gymtracker.data.volume
 import com.gymtracker.settings.SettingsStore
+import com.gymtracker.health.HealthSync
+import com.gymtracker.planning.Reminders
 import com.gymtracker.timer.Notifications
 import com.gymtracker.timer.RestTimer
 import com.gymtracker.util.startOfWeekMillis
@@ -33,6 +35,7 @@ class GymApp : Application() {
     val database by lazy { AppDatabase.build(this) }
     val repository by lazy { WorkoutRepository(database) }
     val backup by lazy { BackupManager(this, database, settings) }
+    val health by lazy { HealthSync(this, repository, settings) }
     val settings by lazy { SettingsStore(this) }
     val restTimer by lazy { RestTimer(this, appScope, settings) }
     val imageStore by lazy { ImageStore(this) }
@@ -43,6 +46,7 @@ class GymApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        Reminders.createChannel(this)
         if (WidgetRenderer.hasWidgets(this)) startWidgetUpdates()
     }
 

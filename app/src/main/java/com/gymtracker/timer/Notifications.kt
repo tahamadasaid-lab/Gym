@@ -13,7 +13,9 @@ import com.gymtracker.R
 
 object Notifications {
     private const val CHANNEL_RUNNING = "rest_timer"
-    private const val CHANNEL_FINISHED = "rest_finished"
+    /** v2 : avec vibration, pour que la montre connectée vibre aussi. */
+    private const val CHANNEL_FINISHED = "rest_finished_v2"
+    private const val OLD_CHANNEL_FINISHED = "rest_finished"
     const val ID_RUNNING = 1
     private const val ID_FINISHED = 2
 
@@ -26,12 +28,14 @@ object Notifications {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
         )
+        nm.deleteNotificationChannel(OLD_CHANNEL_FINISHED)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_FINISHED, "Fin du repos", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Alerte quand le repos est terminé"
-                // Le son et la vibration sont joués directement par le minuteur.
+                description = "Alerte quand le repos est terminé (relayée sur la montre connectée)"
+                // Le son est joué par le minuteur (écouteurs) ; la vibration fait aussi vibrer la montre.
                 setSound(null, null)
-                enableVibration(false)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
         )
@@ -75,7 +79,7 @@ object Notifications {
             .build()
 
     @SuppressLint("MissingPermission")
-    fun showFinished(context: Context, label: String) {
+    fun showFinished(context: Context, label: String, next: NextSet? = null) {
         val nm = NotificationManagerCompat.from(context)
         if (!nm.areNotificationsEnabled()) return
         val n = NotificationCompat.Builder(context, CHANNEL_FINISHED)
@@ -88,6 +92,14 @@ object Notifications {
             .setAutoCancel(true)
             .setTimeoutAfter(2 * 60_000L)
             .setContentIntent(openApp(context))
+            .apply {
+                if (next != null) {
+                    val w = if (next.weightKg % 1.0 == 0.0) next.weightKg.toLong().toString() else next.weightKg.toString().replace('.', ',')
+                    setContentText("${next.exerciseName} : $w kg × ${next.reps}")
+                    addAction(0, "✓ Série faite ($w × ${next.reps})", SessionActionReceiver.pendingIntent(context))
+                }
+            }
+            .extend(NotificationCompat.WearableExtender())
             .build()
         runCatching { nm.notify(ID_FINISHED, n) }
     }

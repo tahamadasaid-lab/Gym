@@ -18,7 +18,7 @@ import com.gymtracker.ui.workout.WorkoutViewModel
 
 object AppViewModelProvider {
     val Factory = viewModelFactory {
-        initializer { WorkoutViewModel(app().repository, app().restTimer) }
+        initializer { WorkoutViewModel(app().repository, app().restTimer, app().health) }
         initializer { HistoryViewModel(app().repository) }
         initializer { SessionDetailViewModel(createSavedStateHandle(), app().repository) }
         initializer { ProgramEditorViewModel(createSavedStateHandle(), app().repository) }

@@ -13,8 +13,8 @@ android {
         applicationId = "com.gymtracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "5.0"
+        versionCode = 7
+        versionName = "6.0"
     }
 
     // Clé de signature personnelle, gardée hors du dépôt (secret GitHub, voir README) : chaque nouvel APK
@@ -83,6 +83,9 @@ dependencies {
     implementation("androidx.room:room-runtime:$room")
     implementation("androidx.room:room-ktx:$room")
     ksp("androidx.room:room-compiler:$room")
+
+    // Health Connect (Google Fit, Samsung Health, montres)
+    implementation("androidx.health.connect:connect-client:1.1.0")
 
     // Sauvegarde automatique hebdomadaire
     implementation("androidx.work:work-runtime-ktx:2.10.0")

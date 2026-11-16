@@ -36,6 +36,13 @@ interface WorkoutDao {
     @Query("UPDATE exercises SET notes = :notes WHERE id = :id")
     suspend fun updateExerciseNotes(id: Long, notes: String)
 
+    @Query("UPDATE sessions SET avgHeartRate = :heartRate, measuredKcal = :kcal WHERE id = :id")
+    suspend fun updateSessionHealth(id: Long, heartRate: Int?, kcal: Double?)
+
+    @Transaction
+    @Query("SELECT * FROM sessions WHERE id = :id")
+    suspend fun getSession(id: Long): SessionWithExercises?
+
     @Query("UPDATE sessions SET notes = :notes WHERE id = :id")
     suspend fun updateSessionNotes(id: Long, notes: String)
 

@@ -3,6 +3,7 @@ package com.gymtracker
 import android.content.Intent
 import android.graphics.Color
 import androidx.lifecycle.lifecycleScope
+import com.gymtracker.planning.Reminders
 import com.gymtracker.widget.GymWidgetProvider
 import kotlinx.coroutines.launch
 import android.os.Bundle
@@ -50,10 +51,17 @@ class MainActivity : ComponentActivity() {
 
     /** Bouton « Démarrer une séance » du widget. */
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action == GymWidgetProvider.ACTION_START_SESSION) {
-            intent.action = null
-            val app = application as GymApp
-            lifecycleScope.launch { app.repository.startSessionIfNone() }
+        val app = application as GymApp
+        when (intent?.action) {
+            GymWidgetProvider.ACTION_START_SESSION -> {
+                intent.action = null
+                lifecycleScope.launch { app.repository.startSessionIfNone() }
+            }
+            Reminders.ACTION_START_PLANNED -> {
+                val programId = intent.getLongExtra(Reminders.EXTRA_PROGRAM, 0L)
+                intent.action = null
+                lifecycleScope.launch { app.repository.startPlannedIfNone(programId) }
+            }
         }
     }
 }

@@ -78,6 +78,7 @@ import com.gymtracker.data.effort
 import com.gymtracker.data.efforts
 import com.gymtracker.data.volume
 import com.gymtracker.data.supersetBlocks
+import com.gymtracker.data.currentWeek
 import com.gymtracker.ui.progress.GoalCard
 import com.gymtracker.ui.progress.InsightsViewModel
 import com.gymtracker.data.RecordEvent
@@ -169,6 +170,9 @@ private fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { HeroCard(state, onStartFree) }
+            item {
+                PlanningCard(state.programs, onStart = { id -> if (id == 0L) onStartFree() else onStartProgram(id) })
+            }
 
             val activeGoals = goals.orEmpty().filter { !it.achieved }.take(2)
             if (activeGoals.isNotEmpty()) {
@@ -264,7 +268,11 @@ private fun ProgramCard(p: ProgramWithExercises, onStart: () -> Unit, onEdit: ()
             Column(Modifier.weight(1f)) {
                 Text(p.program.name, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "${items.size} exercices · ${items.sumOf { it.item.targetSets }} séries",
+                    "${items.size} exercices · ${items.sumOf { it.item.targetSets }} séries" +
+                        (p.program.weeks?.let { w ->
+                            val cur = p.program.currentWeek().takeIf { p.program.cycleStartedAt != null }
+                            if (cur != null) " · semaine $cur/$w" else " · cycle de $w semaines"
+                        } ?: ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -379,7 +387,7 @@ private fun ActiveSessionScreen(session: SessionWithExercises, vm: WorkoutViewMo
     val subtitle = "${formatDuration(elapsed)} · ${allSets.size} séries · ${formatVolume(allSets.sumOf { it.volume })} · ${formatKcal(sessionKcal)}"
 
     ScreenScaffold(
-        title = "Séance en cours",
+        title = session.session.programLabel ?: "Séance en cours",
         subtitle = subtitle,
         actions = {
             FilledTonalButton(onClick = { showFinish = true }) { Text("Terminer") }
@@ -712,7 +720,22 @@ private fun ExerciseCard(
                     )
                 }
             }
-            if (suggestion != null && sets.isEmpty()) {
+            val planWeight = item.sessionExercise.targetWeight
+            val planReps = item.sessionExercise.targetReps
+            if (planWeight != null || planReps != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                ) {
+                    Text(
+                        "📅 Plan : " + (planWeight?.let { "${formatWeight(it)} kg" } ?: "") +
+                            (planReps?.let { " × $it" } ?: "") + (target?.let { " · $it séries" } ?: ""),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    )
+                }
+            } else if (suggestion != null && sets.isEmpty()) {
                 Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
                     shape = MaterialTheme.shapes.small,

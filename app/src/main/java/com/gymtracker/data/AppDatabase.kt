@@ -21,7 +21,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Measurement::class,
         ProgressPhoto::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "gymtracker.db")
                 .addCallback(SeedCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }
@@ -108,6 +108,23 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
             "CREATE TABLE IF NOT EXISTS `progress_photos` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
                 "`date` INTEGER NOT NULL, `path` TEXT NOT NULL, `note` TEXT NOT NULL)"
         )
+    }
+}
+
+/** v6 : programmes sur plusieurs semaines, objectifs par séance, fréquence cardiaque. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `programs` ADD COLUMN `weeks` INTEGER")
+        db.execSQL("ALTER TABLE `programs` ADD COLUMN `cycleStartedAt` INTEGER")
+        db.execSQL("ALTER TABLE `programs` ADD COLUMN `deloadLastWeek` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `program_exercises` ADD COLUMN `targetReps` INTEGER")
+        db.execSQL("ALTER TABLE `program_exercises` ADD COLUMN `startWeight` REAL")
+        db.execSQL("ALTER TABLE `program_exercises` ADD COLUMN `weeklyIncrement` REAL")
+        db.execSQL("ALTER TABLE `session_exercises` ADD COLUMN `targetWeight` REAL")
+        db.execSQL("ALTER TABLE `session_exercises` ADD COLUMN `targetReps` INTEGER")
+        db.execSQL("ALTER TABLE `sessions` ADD COLUMN `programLabel` TEXT")
+        db.execSQL("ALTER TABLE `sessions` ADD COLUMN `avgHeartRate` INTEGER")
+        db.execSQL("ALTER TABLE `sessions` ADD COLUMN `measuredKcal` REAL")
     }
 }
 

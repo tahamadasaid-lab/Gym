@@ -27,6 +27,12 @@ data class WorkoutSession(
     val startedAt: Long,
     val endedAt: Long? = null,
     val notes: String = "",
+    /** Ex. « Push · semaine 2/6 » quand la séance vient d'un programme. */
+    val programLabel: String? = null,
+    /** Fréquence cardiaque moyenne lue dans Health Connect (montre), si disponible. */
+    val avgHeartRate: Int? = null,
+    /** Calories calculées à partir de la fréquence cardiaque (plus fiables que l'estimation). */
+    val measuredKcal: Double? = null,
 )
 
 /** Un exercice réalisé pendant une séance. */
@@ -57,6 +63,9 @@ data class SessionExercise(
     val targetSets: Int? = null,
     /** Exercices consécutifs ayant la même valeur = une supersérie (enchaînés sans repos). */
     val supersetGroup: Long? = null,
+    /** Charge et répétitions prévues par le programme (cycle sur plusieurs semaines). */
+    val targetWeight: Double? = null,
+    val targetReps: Int? = null,
 )
 
 /** Une série : poids × répétitions, avec le temps de repos pris avant elle. */
@@ -125,6 +134,13 @@ data class SetHistoryRow(
 data class Program(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
+    /** Nombre de semaines du cycle (null = programme classique, sans progression planifiée). */
+    val weeks: Int? = null,
+    /** Début du cycle (fixé au premier démarrage). */
+    val cycleStartedAt: Long? = null,
+    /** Dernière semaine du cycle allégée (décharge). */
+    @ColumnInfo(defaultValue = "0")
+    val deloadLastWeek: Boolean = false,
 )
 
 @Entity(
@@ -152,6 +168,10 @@ data class ProgramExercise(
     val position: Int,
     val targetSets: Int,
     val supersetGroup: Long? = null,
+    /** Cycle : répétitions visées, charge de la semaine 1 et augmentation par semaine (kg). */
+    val targetReps: Int? = null,
+    val startWeight: Double? = null,
+    val weeklyIncrement: Double? = null,
 )
 
 data class ProgramExerciseWithExercise(

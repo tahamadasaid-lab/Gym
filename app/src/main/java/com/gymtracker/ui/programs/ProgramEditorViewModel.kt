@@ -9,12 +9,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gymtracker.data.Exercise
 import com.gymtracker.data.WorkoutRepository
+import com.gymtracker.data.currentWeek
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-data class ProgramItem(val exerciseId: Long, val targetSets: Int, val supersetGroup: Long? = null)
+data class ProgramItem(
+    val exerciseId: Long,
+    val targetSets: Int,
+    val supersetGroup: Long? = null,
+    val targetReps: Int? = null,
+    val startWeight: Double? = null,
+    val weeklyIncrement: Double? = null,
+)
 
 class ProgramEditorViewModel(
     savedStateHandle: SavedStateHandle,
@@ -24,6 +32,12 @@ class ProgramEditorViewModel(
     val isNew: Boolean = programId == null
 
     var name by mutableStateOf("")
+    /** Nombre de semaines du cycle ; null = programme classique. */
+    var weeks by mutableStateOf<Int?>(null)
+    var deloadLastWeek by mutableStateOf(false)
+    var restartCycle by mutableStateOf(false)
+    var currentWeek by mutableStateOf<Int?>(null)
+        private set
     val items = mutableStateListOf<ProgramItem>()
     var loaded by mutableStateOf(isNew)
         private set
@@ -36,8 +50,18 @@ class ProgramEditorViewModel(
             viewModelScope.launch {
                 repo.getProgram(programId)?.let { p ->
                     name = p.program.name
+                    weeks = p.program.weeks
+                    deloadLastWeek = p.program.deloadLastWeek
+                    currentWeek = p.program.currentWeek().takeIf { p.program.cycleStartedAt != null }
                     items.clear()
-                    items.addAll(p.orderedItems.map { ProgramItem(it.exercise.id, it.item.targetSets, it.item.supersetGroup) })
+                    items.addAll(
+                        p.orderedItems.map {
+                            ProgramItem(
+                                it.exercise.id, it.item.targetSets, it.item.supersetGroup,
+                                it.item.targetReps, it.item.startWeight, it.item.weeklyIncrement,
+                            )
+                        }
+                    )
                 }
                 loaded = true
             }
@@ -96,6 +120,36 @@ class ProgramEditorViewModel(
         }
     }
 
+    fun updateItem(index: Int, transform: (ProgramItem) -> ProgramItem) {
+        items[index] = transform(items[index])
+    }
+
+    /** Séances terminées proposées pour l'import. */
+    val sessions = repo.observeFinishedSessions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Ajoute les exercices des séances choisies (séries, répétitions et charge de la meilleure série). */
+    fun importSessions(sessionIds: List<Long>) = viewModelScope.launch {
+        val chosen = sessionIds.mapNotNull { id -> sessions.value.firstOrNull { it.session.id == id } }
+            .sortedBy { it.session.startedAt }
+        chosen.forEach { s ->
+            s.orderedExercises.forEach { e ->
+                val work = e.sets.filter { it.isWork && !it.isDropSet }
+                val top = work.maxWithOrNull(compareBy<com.gymtracker.data.WorkoutSet> { it.weightKg }.thenBy { it.reps })
+                val item = ProgramItem(
+                    exerciseId = e.exercise.id,
+                    targetSets = work.size.takeIf { it > 0 } ?: 3,
+                    targetReps = top?.reps,
+                    startWeight = top?.weightKg?.takeIf { it > 0 },
+                )
+                val idx = items.indexOfFirst { it.exerciseId == e.exercise.id }
+                if (idx >= 0) items[idx] = item.copy(supersetGroup = items[idx].supersetGroup) else items.add(item)
+            }
+        }
+        if (name.isBlank() && chosen.size == 1) {
+            name = chosen.single().session.programLabel?.substringBefore(" · ") ?: "Ma séance"
+        }
+    }
+
     fun remove(index: Int) {
         items.removeAt(index)
     }
@@ -104,7 +158,15 @@ class ProgramEditorViewModel(
         repo.saveProgramEntries(
             programId,
             name,
-            items.map { WorkoutRepository.ProgramEntry(it.exerciseId, it.targetSets, it.supersetGroup) },
+            items.map {
+                WorkoutRepository.ProgramEntry(
+                    it.exerciseId, it.targetSets, it.supersetGroup, it.targetReps, it.startWeight,
+                    it.weeklyIncrement.takeIf { weeks != null },
+                )
+            },
+            weeks = weeks,
+            deloadLastWeek = deloadLastWeek && weeks != null,
+            restartCycle = restartCycle,
         )
         onDone()
     }

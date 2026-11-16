@@ -30,6 +30,12 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
@@ -73,6 +79,14 @@ fun SettingsScreen(
     var weightText by remember { mutableStateOf(formatWeight(s.profileWeightKg)) }
     var showPlates by remember { mutableStateOf(false) }
     var confirmRestore by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var healthGranted by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { healthGranted = runCatching { vm.health.grantedAll() }.getOrDefault(false) }
+    val healthLauncher = rememberLauncherForActivityResult(vm.health.permissionContract()) { granted ->
+        healthGranted = granted.containsAll(vm.health.permissions)
+        if (healthGranted) vm.update { it.copy(healthSyncEnabled = true) }
+    }
+    val uriHandler = LocalUriHandler.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val notify: (String) -> Unit = { msg -> scope.launch { snackbar.showSnackbar(msg, withDismissAction = true) } }
@@ -199,6 +213,86 @@ fun SettingsScreen(
                 }
             }
 
+            item { SectionHeader("Planning et rappels") }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        SwitchRow(
+                            "Rappel les jours d'entraînement",
+                            "Selon le planning de l'accueil ; pas de rappel si tu as déjà fait ta séance.",
+                            s.reminderEnabled,
+                        ) { on -> vm.updateReminders { it.copy(reminderEnabled = on) } }
+                        TextButton(onClick = { showTimePicker = true }, modifier = Modifier.padding(start = 8.dp)) {
+                            Text("Heure du rappel : ${s.reminderMinutes / 60}h${(s.reminderMinutes % 60).toString().padStart(2, '0')}")
+                        }
+                    }
+                }
+            }
+
+            item { SectionHeader("Santé (Health Connect)") }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        Text(
+                            "Envoie tes séances et calories vers Google Fit, Samsung Health… et récupère la fréquence cardiaque " +
+                                "de ta montre pour un calcul des calories plus fiable.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                        when {
+                            vm.health.needsInstall -> TextButton(
+                                onClick = { uriHandler.openUri("https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata") },
+                                modifier = Modifier.padding(start = 8.dp),
+                            ) { Text("Installer Health Connect") }
+                            !vm.health.isAvailable -> Text(
+                                "Health Connect n'est pas disponible sur ce téléphone.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                            !healthGranted -> FilledTonalButton(
+                                onClick = { healthLauncher.launch(vm.health.permissions) },
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            ) { Text("Connecter Health Connect") }
+                            else -> {
+                                SwitchRow("Envoyer chaque séance terminée", "✅ Connecté", s.healthSyncEnabled) { on ->
+                                    vm.update { it.copy(healthSyncEnabled = on) }
+                                }
+                                TextButton(onClick = { vm.syncAllHealth(notify) }, modifier = Modifier.padding(start = 8.dp)) {
+                                    Text("Envoyer toutes mes séances passées")
+                                }
+                            }
+                        }
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                        Text(
+                            "Calories à partir du cœur (montre) : renseigne ton âge et ton sexe.",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            NumberStepper(
+                                "Âge",
+                                s.age?.toString() ?: "",
+                                { t -> vm.update { it.copy(age = t.toIntOrNull()?.takeIf { a -> a in 10..100 }) } },
+                                step = 1.0,
+                                decimal = false,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            listOf("H" to "Homme", "F" to "Femme").forEach { (k, label) ->
+                                FilterChip(
+                                    selected = s.sex == k,
+                                    onClick = { vm.update { it.copy(sex = if (it.sex == k) null else k) } },
+                                    label = { Text(label) },
+                                    modifier = Modifier.padding(end = 6.dp),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
+            }
+
             item { SectionHeader("Sauvegarde complète") }
             item {
                 Card(Modifier.fillMaxWidth()) {
@@ -282,6 +376,25 @@ fun SettingsScreen(
         }
     }
 
+    if (showTimePicker) {
+        val state = rememberTimePickerState(
+            initialHour = s.reminderMinutes / 60,
+            initialMinute = s.reminderMinutes % 60,
+            is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("Heure du rappel") },
+            text = { TimePicker(state = state) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.updateReminders { it.copy(reminderMinutes = state.hour * 60 + state.minute) }
+                    showTimePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Annuler") } },
+        )
+    }
     if (confirmRestore) {
         AlertDialog(
             onDismissRequest = { confirmRestore = false },

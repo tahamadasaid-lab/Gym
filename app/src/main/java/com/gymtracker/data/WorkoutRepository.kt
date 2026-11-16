@@ -109,13 +109,34 @@ class WorkoutRepository(private val db: AppDatabase) {
         if (dao.observeActiveSession().first() == null) startSession()
     }
 
+    /** Démarre la séance prévue (programme, ou libre si 0) s'il n'y en a pas déjà une en cours. */
+    suspend fun startPlannedIfNone(programId: Long) {
+        if (dao.observeActiveSession().first() != null) return
+        if (programId > 0 && programDao.getProgram(programId) != null) startSessionFromProgram(programId) else startSession()
+    }
+
     suspend fun startSession(): Long = dao.insertSession(WorkoutSession(startedAt = System.currentTimeMillis()))
 
     suspend fun startSessionFromProgram(programId: Long): Long = db.withTransaction {
-        val program = programDao.getProgram(programId)
-        val sessionId = dao.insertSession(WorkoutSession(startedAt = System.currentTimeMillis()))
+        val initial = programDao.getProgram(programId)
+        val now = System.currentTimeMillis()
+        // Cycle : démarre (ou redémarre une fois terminé) au premier lancement.
+        val program = if (initial != null && initial.program.weeks != null &&
+            (initial.program.cycleStartedAt == null || initial.program.cycleFinished(now))
+        ) {
+            programDao.updateProgram(initial.program.copy(cycleStartedAt = now))
+            programDao.getProgram(programId)
+        } else initial
+        val week = program?.program?.currentWeek(now)
+        val sessionId = dao.insertSession(
+            WorkoutSession(startedAt = now, programLabel = program?.label(week))
+        )
         val groups = mutableMapOf<Long, MutableList<Long>>()
         program?.orderedItems?.forEachIndexed { i, it ->
+            val p = it.let { program!!.program }
+            val target = if (week != null && p.weeks != null && it.item.startWeight != null) {
+                plannedWeight(it.item.startWeight, it.item.weeklyIncrement ?: 0.0, week, p.weeks, p.deloadLastWeek)
+            } else it.item.startWeight
             val seId = dao.insertSessionExercise(
                 SessionExercise(
                     sessionId = sessionId,
@@ -123,6 +144,8 @@ class WorkoutRepository(private val db: AppDatabase) {
                     position = i,
                     targetSets = it.item.targetSets,
                     supersetGroup = null,
+                    targetWeight = target,
+                    targetReps = it.item.targetReps,
                 )
             )
             it.item.supersetGroup?.let { g -> groups.getOrPut(g) { mutableListOf() } += seId }
@@ -130,6 +153,36 @@ class WorkoutRepository(private val db: AppDatabase) {
         // Les superséries du programme reçoivent un identifiant propre à la séance.
         groups.values.filter { it.size > 1 }.forEach { ids -> dao.setSupersetGroup(ids, ids.first()) }
         sessionId
+    }
+
+    suspend fun getSession(id: Long): SessionWithExercises? = dao.getSession(id)
+    suspend fun updateSessionHealth(id: Long, heartRate: Int?, kcal: Double?) = dao.updateSessionHealth(id, heartRate, kcal)
+
+    /**
+     * Crée un programme à partir d'une ou plusieurs séances passées : exercices dans l'ordre d'apparition,
+     * nombre de séries, répétitions et charge de la meilleure série (pour démarrer un cycle).
+     */
+    suspend fun createProgramFromSessions(sessionIds: List<Long>, name: String): Long {
+        val sessions = sessionIds.mapNotNull { dao.getSession(it) }.sortedBy { it.session.startedAt }
+        val single = sessions.size == 1
+        val entries = linkedMapOf<Long, ProgramEntry>()
+        sessions.forEach { s ->
+            s.orderedExercises.forEach { e ->
+                val work = e.sets.filter { it.isWork && !it.isDropSet }
+                val top = work.maxWithOrNull(compareBy<WorkoutSet> { it.weightKg }.thenBy { it.reps })
+                val entry = ProgramEntry(
+                    exerciseId = e.exercise.id,
+                    targetSets = work.size.takeIf { it > 0 } ?: e.sessionExercise.targetSets ?: 3,
+                    supersetGroup = if (single) e.sessionExercise.supersetGroup else null,
+                    targetReps = top?.reps,
+                    startWeight = top?.weightKg?.takeIf { it > 0 },
+                )
+                val previous = entries[e.exercise.id]
+                // Exercice présent dans plusieurs séances : on garde la séance la plus récente.
+                entries[e.exercise.id] = if (previous == null || top != null) entry else previous
+            }
+        }
+        return saveProgramEntries(null, name, entries.values.toList())
     }
 
     suspend fun finishSession(id: Long) = dao.finishSession(id, System.currentTimeMillis())
@@ -199,17 +252,35 @@ class WorkoutRepository(private val db: AppDatabase) {
     suspend fun getProgram(id: Long): ProgramWithExercises? = programDao.getProgram(id)
     suspend fun deleteProgram(id: Long) = programDao.deleteProgram(id)
 
-    data class ProgramEntry(val exerciseId: Long, val targetSets: Int, val supersetGroup: Long? = null)
+    data class ProgramEntry(
+        val exerciseId: Long,
+        val targetSets: Int,
+        val supersetGroup: Long? = null,
+        val targetReps: Int? = null,
+        val startWeight: Double? = null,
+        val weeklyIncrement: Double? = null,
+    )
 
     /** items = (exerciseId, séries visées), dans l'ordre. Retourne l'id du programme. */
     suspend fun saveProgram(id: Long?, name: String, items: List<Pair<Long, Int>>): Long =
         saveProgramEntries(id, name, items.map { ProgramEntry(it.first, it.second) })
 
-    suspend fun saveProgramEntries(id: Long?, name: String, items: List<ProgramEntry>): Long = db.withTransaction {
+    suspend fun saveProgramEntries(
+        id: Long?,
+        name: String,
+        items: List<ProgramEntry>,
+        weeks: Int? = null,
+        deloadLastWeek: Boolean = false,
+        restartCycle: Boolean = false,
+    ): Long = db.withTransaction {
         val programId = if (id == null) {
-            programDao.insertProgram(Program(name = name.trim()))
+            programDao.insertProgram(Program(name = name.trim(), weeks = weeks, deloadLastWeek = deloadLastWeek))
         } else {
-            programDao.updateProgram(Program(id = id, name = name.trim()))
+            val old = programDao.getProgram(id)?.program
+            val keepStart = old?.cycleStartedAt?.takeIf { !restartCycle && weeks != null && old.weeks != null }
+            programDao.updateProgram(
+                Program(id = id, name = name.trim(), weeks = weeks, cycleStartedAt = keepStart, deloadLastWeek = deloadLastWeek)
+            )
             programDao.clearProgramExercises(id)
             id
         }
@@ -221,6 +292,9 @@ class WorkoutRepository(private val db: AppDatabase) {
                     position = i,
                     targetSets = e.targetSets,
                     supersetGroup = e.supersetGroup,
+                    targetReps = e.targetReps,
+                    startWeight = e.startWeight,
+                    weeklyIncrement = e.weeklyIncrement,
                 )
             }
         )
@@ -228,13 +302,7 @@ class WorkoutRepository(private val db: AppDatabase) {
     }
 
     suspend fun saveSessionAsProgram(session: SessionWithExercises, name: String): Long =
-        saveProgramEntries(
-            id = null,
-            name = name,
-            items = session.orderedExercises.map {
-                ProgramEntry(it.exercise.id, it.targetSets(), it.sessionExercise.supersetGroup)
-            },
-        )
+        createProgramFromSessions(listOf(session.session.id), name)
 
     private fun SessionExerciseWithSets.targetSets(): Int =
         sets.size.takeIf { it > 0 } ?: sessionExercise.targetSets ?: 3

@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
 import com.gymtracker.ui.AppViewModelProvider
@@ -63,6 +64,8 @@ fun ProgramEditorScreen(
     val byId = exercises.associateBy { it.id }
     var showPicker by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var targetEdit by remember { mutableStateOf<Int?>(null) }
+    var showImport by remember { mutableStateOf(false) }
     val canSave = vm.name.isNotBlank() && vm.items.isNotEmpty()
 
     ScreenScaffold(
@@ -95,6 +98,7 @@ fun ProgramEditorScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            item { CycleCard(vm) }
             item {
                 Text(
                     "${vm.items.size} exercice(s) · ${vm.items.sumOf { it.targetSets }} séries",
@@ -110,6 +114,7 @@ fun ProgramEditorScreen(
                     Modifier.fillMaxWidth(),
                     border = if (inSuperset) BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f)) else null,
                 ) {
+                    Column {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column {
                             IconButton(onClick = { vm.move(index, -1) }, enabled = index > 0, modifier = Modifier.size(32.dp)) {
@@ -133,6 +138,10 @@ fun ProgramEditorScreen(
                             Icon(Icons.Filled.Add, "Plus de séries", Modifier.size(18.dp))
                         }
                         IconButton(onClick = { vm.remove(index) }) { Icon(Icons.Outlined.Delete, "Retirer") }
+                    }
+                    TextButton(onClick = { targetEdit = index }, modifier = Modifier.padding(start = 44.dp, bottom = 4.dp)) {
+                        Text(targetSummary(item, vm.weeks), style = MaterialTheme.typography.labelMedium)
+                    }
                     }
                 }
                 if (index < vm.items.lastIndex) {
@@ -161,7 +170,35 @@ fun ProgramEditorScreen(
                     Text("Ajouter un exercice")
                 }
             }
+            item {
+                OutlinedButton(onClick = { showImport = true }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Icon(Icons.Filled.History, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Importer depuis des séances passées")
+                }
+            }
         }
+    }
+
+    targetEdit?.let { index ->
+        vm.items.getOrNull(index)?.let { item ->
+            TargetDialog(
+                name = byId[item.exerciseId]?.name ?: "",
+                item = item,
+                weeks = vm.weeks,
+                deload = vm.deloadLastWeek,
+                onDismiss = { targetEdit = null },
+                onSave = { updated -> vm.updateItem(index) { updated }; targetEdit = null },
+            )
+        }
+    }
+    if (showImport) {
+        val sessions by vm.sessions.collectAsStateWithLifecycle()
+        ImportSessionsDialog(
+            sessions = sessions,
+            onDismiss = { showImport = false },
+            onImport = { ids -> vm.importSessions(ids); showImport = false },
+        )
     }
 
     if (showPicker) {

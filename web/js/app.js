@@ -358,7 +358,8 @@ function viewSession(page) {
   if (!s) { ui.stack.pop(); return ROOTS[ui.tab](); }
   const st = sessionStats(s);
   return `${header(fmtLongDate(s.startedAt), { backBtn: true, sub: `${fmtTime(s.startedAt)} – ${s.endedAt ? fmtTime(s.endedAt) : 'en cours'}`,
-    actions: iconBtn('delete-session', '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', 'Supprimer', `data-id="${s.id}"`) })}
+    actions: iconBtn('session-to-program', '<path d="M6 3h12v18l-6-4-6 4z"/>', 'Créer un programme', `data-id="${s.id}"`) +
+      iconBtn('delete-session', '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', 'Supprimer', `data-id="${s.id}"`) })}
   <div class="content">
     <div class="tiles card">
       ${tile('durée', fmtDurHuman(st.duration))}
@@ -529,6 +530,7 @@ function viewProgram(page) {
       </div>`;
     }).join('')}</div>` : `<div class="card muted small">Ajoute les exercices du programme et le nombre de séries visées.</div>`}
     <button class="btn tonal big" data-act="pg-add">${svgIcon(PLUS)} Ajouter un exercice</button>
+    <button class="btn tonal big" data-act="pg-import">⟲ Importer des séances passées</button>
     <button class="btn primary big" data-act="pg-save">Enregistrer</button>
   </div>`;
 }
@@ -778,6 +780,32 @@ async function finishSession() {
   S.timer = null;
   ui.drafts = {};
   commit();
+}
+
+/** Exercices de séances passées → éléments de programme (nombre de séries réalisé ; la séance la plus récente l'emporte). */
+function itemsFromSessions(sessions) {
+  const map = new Map();
+  [...sessions].sort((a, b) => a.startedAt - b.startedAt).forEach((s) => s.items.forEach((it) => {
+    if (it.sets.length || !map.has(it.exerciseId)) map.set(it.exerciseId, { exerciseId: it.exerciseId, targetSets: it.sets.length || it.targetSets || 3 });
+  }));
+  return [...map.values()];
+}
+
+/** Choix d'une ou plusieurs séances passées (cases à cocher). */
+function pickSessions(onPick) {
+  const list = finishedSessions();
+  const el = openSheet(`<h3>Importer des séances</h3>
+    <p class="muted small">Les exercices et le nombre de séries réalisées sont repris.</p>
+    ${list.length ? `<div class="card list">${list.map((s) => `<label class="row"><input type="checkbox" value="${s.id}">
+      <div class="grow"><b>${fmtLongDate(s.startedAt)}</b><div class="muted small">${esc(s.items.map((i) => exById(i.exerciseId)?.name).filter(Boolean).join(' · '))}</div></div></label>`).join('')}</div>`
+      : '<div class="muted">Aucune séance terminée pour l\'instant.</div>'}
+    <div class="sheet-actions"><button class="btn primary" data-x="ok">Importer</button></div>`);
+  el.querySelector('[data-x="ok"]').addEventListener('click', () => {
+    const ids = [...el.querySelectorAll('input[type=checkbox]:checked')].map((c) => +c.value);
+    if (!ids.length) { toast('Choisis au moins une séance'); return; }
+    closeSheet();
+    onPick(S.sessions.filter((s) => ids.includes(s.id)));
+  });
 }
 
 function saveSessionAsProgram() {
@@ -1157,6 +1185,30 @@ const A = {
     page.draft.name = $('#pg-name').value;
     page.draft.items.splice(+d.i, 1);
     render();
+  },
+  'pg-import': () => {
+    const page = ui.stack[ui.stack.length - 1];
+    page.draft.name = $('#pg-name').value;
+    pickSessions((sessions) => {
+      itemsFromSessions(sessions).forEach((item) => {
+        const i = page.draft.items.findIndex((x) => x.exerciseId === item.exerciseId);
+        if (i >= 0) page.draft.items[i] = item; else page.draft.items.push(item);
+      });
+      render();
+    });
+  },
+  'session-to-program': (d) => {
+    const s = S.sessions.find((x) => x.id === +d.id);
+    if (!s) return;
+    const el = openSheet(`<h3>Créer un programme</h3>
+      <label class="field"><span>Nom du programme</span><input id="np-name" placeholder="ex. Push"></label>
+      <div class="sheet-actions"><button class="btn primary" data-x="save">Créer</button></div>`);
+    el.querySelector('[data-x="save"]').addEventListener('click', () => {
+      const name = el.querySelector('#np-name').value.trim();
+      if (!name) { toast('Donne un nom au programme'); return; }
+      S.programs.push({ id: newId(), name, items: itemsFromSessions([s]) });
+      closeSheet(); commit(); toast('Programme créé (onglet Séance)');
+    });
   },
   'pg-save': () => {
     const page = ui.stack[ui.stack.length - 1];

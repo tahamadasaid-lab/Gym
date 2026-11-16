@@ -9,6 +9,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.content.ContextCompat
+import com.gymtracker.GymApp
 import com.gymtracker.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -126,7 +127,10 @@ class RestTimer(
         val label = _state.value.label
         _state.update { it.copy(remainingSeconds = 0, running = false) }
         alert()
-        Notifications.showFinished(context, label)
+        scope.launch {
+            val next = (context as? GymApp)?.let { runCatching { NextSetFinder.find(it.repository) }.getOrNull() }
+            Notifications.showFinished(context, label, next)
+        }
         scope.launch {
             delay(8_000) // laisse le temps aux bips, à l'annonce vocale et à la vibration
             releaseWakeLock()

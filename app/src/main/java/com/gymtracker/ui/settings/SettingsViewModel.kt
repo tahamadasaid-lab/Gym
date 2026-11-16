@@ -19,6 +19,21 @@ class SettingsViewModel(private val app: GymApp) : ViewModel() {
 
     fun testAlert() = app.restTimer.alert("Développé couché")
 
+    val health = app.health
+
+    /** Réglages modifiés : on reprogramme les rappels. */
+    fun updateReminders(transform: (AppSettings) -> AppSettings) {
+        store.update(transform)
+        com.gymtracker.planning.Reminders.schedule(app, store.settings.value)
+    }
+
+    fun syncAllHealth(onResult: (String) -> Unit) = viewModelScope.launch {
+        onResult(
+            runCatching { "${app.health.syncAll()} séance(s) envoyée(s) à Health Connect" }
+                .getOrElse { "Échec de l'envoi : ${it.message}" }
+        )
+    }
+
     private fun describe(s: BackupManager.Summary) =
         "${s.sessions} séance(s), ${s.exercises} exercices, ${s.programs} programme(s), ${s.photos} photo(s)"
 

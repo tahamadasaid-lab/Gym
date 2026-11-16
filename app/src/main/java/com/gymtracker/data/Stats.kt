@@ -54,6 +54,9 @@ data class SessionSummary(
     val volume: Double,
     val averageRestSeconds: Int?,
     val efforts: List<Effort> = emptyList(),
+    val programLabel: String? = null,
+    val measuredKcal: Double? = null,
+    val avgHeartRate: Int? = null,
 ) {
     val durationSeconds: Long get() = ((endedAt ?: System.currentTimeMillis()) - startedAt) / 1000
 }
@@ -70,6 +73,9 @@ fun SessionWithExercises.summary(): SessionSummary {
         volume = allSets.sumOf { it.volume },
         averageRestSeconds = if (rests.isEmpty()) null else rests.average().toInt(),
         efforts = efforts(),
+        programLabel = session.programLabel,
+        measuredKcal = session.measuredKcal,
+        avgHeartRate = session.avgHeartRate,
     )
 }
 

@@ -71,6 +71,9 @@ import com.gymtracker.ui.components.EmptyState
 import com.gymtracker.ui.components.ExerciseAvatar
 import com.gymtracker.ui.components.ScreenScaffold
 import com.gymtracker.ui.components.StatTile
+import com.gymtracker.ui.components.TextInputDialog
+import android.widget.Toast
+import androidx.compose.material.icons.filled.BookmarkAdd
 import com.gymtracker.ui.workout.SessionNotesField
 import com.gymtracker.util.formatDuration
 import com.gymtracker.util.formatDurationHuman
@@ -202,7 +205,8 @@ private fun SessionCard(s: SessionSummary, onClick: () -> Unit) {
                 Text(formatLongDate(s.startedAt), style = MaterialTheme.typography.titleMedium)
                 Text(
                     "${formatTime(s.startedAt)} · ${formatDurationHuman(s.durationSeconds)} · ${s.setCount} séries · ${formatVolume(s.volume)}\n" +
-                        "🔥 ${formatKcal(LocalCalories.current.kcal(s.efforts))}",
+                        "🔥 ${formatKcal(s.measuredKcal ?: LocalCalories.current.kcal(s.efforts))}" +
+                        (s.avgHeartRate?.let { " · ❤️ $it bpm" } ?: "") + (s.programLabel?.let { " · $it" } ?: ""),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -237,15 +241,18 @@ fun SessionDetailScreen(
     val session by vm.session.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
     var edit by remember { mutableStateOf<SetEdit?>(null) }
+    var showCreateProgram by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val s = session
 
     ScreenScaffold(
         title = s?.let { formatLongDate(it.session.startedAt) } ?: "Séance",
-        subtitle = s?.let { "Début à ${formatTime(it.session.startedAt)}" },
+        subtitle = s?.let { listOfNotNull(it.session.programLabel, "Début à ${formatTime(it.session.startedAt)}").joinToString(" · ") },
         navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") }
         },
         actions = {
+            IconButton(onClick = { showCreateProgram = true }) { Icon(Icons.Filled.BookmarkAdd, "Créer un programme à partir de cette séance") }
             IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.Delete, "Supprimer la séance") }
         },
     ) { padding ->
@@ -268,7 +275,12 @@ fun SessionDetailScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatTile("Volume", formatVolume(summary.volume), Modifier.weight(1f))
-                        StatTile("Calories", formatKcal(calories.kcal(summary.efforts)), Modifier.weight(1f), detail = "estimation")
+                        StatTile(
+                            "Calories",
+                            formatKcal(summary.measuredKcal ?: calories.kcal(summary.efforts)),
+                            Modifier.weight(1f),
+                            detail = summary.avgHeartRate?.let { "❤️ $it bpm · mesurées" } ?: "estimation",
+                        )
                     }
                 }
             }
@@ -369,6 +381,21 @@ fun SessionDetailScreen(
         null -> Unit
     }
 
+    if (showCreateProgram) {
+        TextInputDialog(
+            title = "Créer un programme",
+            label = "Nom du programme",
+            initial = s?.session?.programLabel?.substringBefore(" · ") ?: "",
+            confirmLabel = "Créer",
+            onDismiss = { showCreateProgram = false },
+            onConfirm = { name ->
+                showCreateProgram = false
+                vm.createProgram(name) {
+                    Toast.makeText(context, "Programme « $name » créé (onglet Séance)", Toast.LENGTH_LONG).show()
+                }
+            },
+        )
+    }
     if (confirmDelete) {
         ConfirmDialog(
             title = "Supprimer la séance ?",

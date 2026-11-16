@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import com.gymtracker.data.supersetBlocks
+import com.gymtracker.health.HealthSync
 import com.gymtracker.timer.RestTimer
 import com.gymtracker.util.formatWeight
 import com.gymtracker.util.parseWeight
@@ -60,6 +61,7 @@ sealed interface WorkoutUiState {
 class WorkoutViewModel(
     private val repo: WorkoutRepository,
     val restTimer: RestTimer,
+    private val health: HealthSync? = null,
 ) : ViewModel() {
 
     private val activeDetail = repo.observeActiveSession()
@@ -114,6 +116,14 @@ class WorkoutViewModel(
         inputs[item.sessionExercise.id]?.let { return it }
         val sets = item.orderedSets.filter { it.isWork }
         val prevWork = previousSets.filter { it.isWork }
+        val se = item.sessionExercise
+        if (sets.isEmpty() && (se.targetWeight != null || se.targetReps != null)) {
+            // Programme sur plusieurs semaines : charge prévue pour cette semaine.
+            return SetInput(
+                se.targetWeight?.let { formatWeight(it) } ?: prevWork.firstOrNull()?.let { formatWeight(it.weightKg) } ?: "",
+                se.targetReps?.toString() ?: prevWork.firstOrNull()?.reps?.toString() ?: "",
+            )
+        }
         val reference = sets.lastOrNull()
             ?: prevWork.getOrNull(sets.size)
             ?: prevWork.lastOrNull()
@@ -136,7 +146,10 @@ class WorkoutViewModel(
     /** Termine la séance ; si elle est vide, elle est simplement supprimée. */
     fun finishSession(session: SessionWithExercises) = viewModelScope.launch {
         if (session.exercises.all { it.sets.isEmpty() }) repo.deleteSession(session.session.id)
-        else repo.finishSession(session.session.id)
+        else {
+            repo.finishSession(session.session.id)
+            health?.syncIfEnabled(session.session.id)
+        }
         restTimer.dismiss()
         inputs.clear()
         _previous.value = emptyMap()

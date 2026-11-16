@@ -27,6 +27,16 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
 - Sinon : résumé de la semaine et bouton « Démarrer une séance ».
 - Ajout : appui long sur l'écran d'accueil › Widgets › GymTracker.
 
+### Programmes et planning
+- **Créer un programme à partir de séances passées** : Historique › une séance › 🔖, ou bouton
+  « Importer depuis des séances passées » dans l'éditeur (plusieurs séances possibles). Exercices,
+  séries, répétitions et charge de la meilleure série sont repris.
+- **Programmes sur plusieurs semaines** : cycle de 2 à 16 semaines, charge de départ et augmentation
+  par semaine pour chaque exercice (+1,25 / 2,5 / 5 kg), semaine de décharge optionnelle (−20 %).
+  La séance affiche « Push · semaine 2/6 » et pré-remplit la charge prévue.
+- **Planning de la semaine** (accueil) : un programme ou une séance libre par jour, bouton « Démarrer »
+  pour la séance du jour, **rappel** à l'heure choisie (Réglages) les jours prévus.
+
 ### Coaching pendant la séance
 - **Progression conseillée** : « 💡 82,5 kg × 8 » si tu as réussi toutes tes reps la dernière fois
   (+2,5 kg ; +1,25 kg en isolation ; +5 kg au-delà de 100 kg en jambes/dos), sinon même charge.
@@ -46,6 +56,13 @@ temps de repos, et de ta progression au fil des séances. Tout est stocké local
   (la musique baisse un instant), vibration et notification, **même écran éteint**.
 - Avertissement 10 secondes avant la fin ; option « sonner même en mode silencieux » (canal alarme).
 - Tout se règle dans **Réglages** (⚙ sur l'accueil), avec un bouton « Tester l'alerte ».
+
+### Montre connectée et Health Connect
+- La notification « Repos terminé » est relayée sur la montre (Wear OS, Galaxy Watch…) avec un bouton
+  **« ✓ Série faite (80 × 8) »** : la série est enregistrée et le repos suivant démarre, sans sortir le téléphone.
+- **Health Connect** (Réglages) : chaque séance terminée est envoyée (séance de musculation + calories)
+  vers Google Fit, Samsung Health… La fréquence cardiaque de ta montre pendant la séance est lue pour
+  calculer les calories (formule de Keytel, âge et sexe à renseigner).
 
 ### Calories
 - Dépense estimée **par exercice**, **par séance**, sur la semaine (accueil) et dans l'historique.
@@ -103,6 +120,12 @@ données), le workflow signe l'APK avec une clé personnelle stockée dans deux 
 | `SIGNING_KEYSTORE_BASE64` | fichier de clé encodé en base64 |
 | `SIGNING_PASSWORD` | mot de passe du fichier et de la clé |
 | `SIGNING_KEY_ALIAS` | alias de la clé dans le fichier (facultatif, `gymtracker` par défaut) |
+
+**Passer à une clé privée** (l'ancienne clé de debug figure dans l'historique public du dépôt) :
+1. Dans l'appli : Réglages › Sauvegarde complète › **Sauvegarder** (choisis Google Drive).
+2. Remplace les 3 secrets GitHub par ceux de la nouvelle clé, puis relance « Build APK ».
+3. Désinstalle GymTracker, installe le nouvel APK, puis Réglages › **Restaurer** la sauvegarde.
+Ensuite, toutes les mises à jour s'installent par-dessus, comme avant.
 
 La clé n'est plus versionnée dans le dépôt. Sans ces secrets, l'APK est signé avec une clé temporaire
 (un avertissement s'affiche dans le run). Pour mettre à jour une installation faite avec les versions 2 et 3
@@ -174,7 +197,7 @@ app/src/main/java/com/gymtracker/
     └── theme/
 ```
 
-### Modèle de données (v5)
+### Modèle de données (v6)
 | Table | Contenu |
 |---|---|
 | `exercises` | nom, groupe musculaire, repos par défaut, photo |
@@ -187,5 +210,5 @@ app/src/main/java/com/gymtracker/
 | `goals` | objectifs (exercice ou poids de corps), échéance |
 | `measurements` / `progress_photos` | mensurations et photos de progression |
 
-Les mises à jour (v1 → v2 → v3 → v4 → v5) conservent toutes les données (migrations testées dans `MigrationTest`).
+Les mises à jour (v1 → … → v6) conservent toutes les données (migrations testées dans `MigrationTest`).
 Tests : `./gradlew testDebugUnitTest`.
